@@ -1,0 +1,43 @@
+/local/
+/metadata/local.meta
+ 
+# ---- Splunk packaging / checks ----
+*.spl
+*.tgz
+*.tar.gz
+appinspect_report*
+*.bak
+*.orig
+*.rej
+ 
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+ 
+# ---- Secrets ----
+*.pem
+*.key
+*.p12
+.env.*
+ 
+# ---- Editors / OS ----
+*.swp
+*.swo
+*~
+Session.vim
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+ 
