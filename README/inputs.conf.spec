@@ -1,4 +1,4 @@
-[website-ping://<name>]
+[web_ping://<name>]
 url = <string>
 * The URL to check.
 
@@ -13,3 +13,6 @@ user_agent = <string>
 
 max_redirects = <integer>
 * Maximum number of redirects before a request fails.
+
+log_level = <string> 
+* Log Level for this URL. Defaults to INFO.
