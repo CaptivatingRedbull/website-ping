@@ -25,6 +25,9 @@ htmlcov/
 build/
 dist/
  
+# ---- Integration test evidence ----
+tests/integration/.evidence/
+
 # ---- Secrets ----
 *.pem
 *.key
