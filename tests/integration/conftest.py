@@ -363,9 +363,28 @@ def setup_noroute(stack: Stack, manager: StackManager) -> None:
     )
 
 
+def setup_distributed(stack: Stack, manager: StackManager) -> None:
+    _start(stack, manager)
+    _deliver_helpers(stack, manager, stack.splunk_services)
+    _probe(stack, manager, stack.splunk_services)
+    stack.facts.update(
+        install.install_distributed(
+            stack, manager.package, _config_archive(manager, "distributed")
+        )
+    )
+    install.wait_registered(stack, "hf", "dist-check", stack.stages)
+    wait_for(
+        STARTED,
+        lambda: True if stack.target_log() else None,
+        EVENT_TIMEOUT,
+        stack.stages,
+    )
+
+
 SETUPS: dict[str, Callable[[Stack, StackManager], None]] = {
     "standalone": setup_standalone,
     "noroute": setup_noroute,
+    "distributed": setup_distributed,
 }
 
 
@@ -473,6 +492,11 @@ def standalone(stacks: StackManager, splunk_line: str) -> Stack:
 @pytest.fixture
 def no_route_stack(stacks: StackManager, splunk_line: str) -> Stack:
     return stacks.get(splunk_line, "noroute")
+
+
+@pytest.fixture
+def distributed_stack(stacks: StackManager, splunk_line: str) -> Stack:
+    return stacks.get(splunk_line, "distributed")
 
 
 @pytest.fixture

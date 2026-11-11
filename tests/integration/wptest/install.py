@@ -24,11 +24,14 @@ CONFIG_IN_CONTAINER = "/tmp/website_ping_inputs.tar.gz"
 EXECUTABLE = "bin/web_ping.py"
 EXTRA_ALLOWED = ("bin/__pycache__/", "local/")
 RESTART_TIMEOUT = 300
-# splunk install app records the archive's checksum in these two places, on both lines.
+# splunk install app records the archive's checksum in default/app.conf and
+# metadata/local.meta. A deployment client records the app's state in
+# local/app.conf and metadata/local.meta instead. Measured on both lines.
 APP_CONF = "default/app.conf"
 INSTALL_CHECKSUM = ("install", "install_source_checksum")
 LOCAL_META = "metadata/local.meta"
-LOCAL_META_STANZAS = ["app/install/install_source_checksum"]
+INSTALLED_STANZAS = ["app/install/install_source_checksum"]
+DEPLOYED_STANZAS = ["app/install/state"]
 
 
 @dataclass(frozen=True)
@@ -224,14 +227,17 @@ def verify_install(
     service: str,
     package: Package,
     path: str = f"/opt/splunk/etc/apps/{APP}",
-    allow_missing_static: bool = False,
+    deployed: bool = False,
 ) -> list[str]:
     """Version, hashes, mode and owner, as under "Installing the apps".
 
     splunk install app adds install_source_checksum to default/app.conf and
     creates metadata/local.meta for it. So app.conf is compared setting by
-    setting without that key, and local.meta may hold only that stanza.
+    setting without that key, and local.meta may hold only the stanza its
+    install route writes. deployed means delivered by the deployment server,
+    which writes a different stanza and leaves out the empty static folder.
     """
+    stanzas_expected = DEPLOYED_STANZAS if deployed else INSTALLED_STANZAS
     problems: list[str] = []
     entries = installed_files(stack, service, path)
     installed_app_conf = stack.exec(service, f"cat {path}/{APP_CONF}\n")
@@ -256,17 +262,17 @@ def verify_install(
                 f"{service}: {relative} has mode {entry.mode}, expected 755"
             )
     for folder in package.folders:
-        if folder not in entries and not (allow_missing_static and folder == "static"):
+        if folder not in entries and not (deployed and folder == "static"):
             problems.append(f"{service}: folder {folder} missing")
     for relative, entry in entries.items():
         known = relative in package.files or relative in package.folders
         allowed = any((relative + "/").startswith(prefix) for prefix in EXTRA_ALLOWED)
         if relative == LOCAL_META and relative not in package.files:
             stanzas = _parse(stack.exec(service, f"cat {path}/{LOCAL_META}\n"))
-            if stanzas.sections() != LOCAL_META_STANZAS:
+            if stanzas.sections() != stanzas_expected:
                 problems.append(
                     f"{service}: {LOCAL_META} has stanzas {stanzas.sections()},"
-                    f" expected only {LOCAL_META_STANZAS}"
+                    f" expected only {stanzas_expected}"
                 )
         elif not known and not allowed:
             kind = "folder" if entry.kind == "d" else "file"
@@ -313,3 +319,94 @@ def wait_registered(stack: Stack, service: str, stanza: str, stages: Stages) -> 
         RESTART_TIMEOUT,
         stages,
     )
+
+
+DEPLOYMENT_APPS = "/opt/splunk/etc/deployment-apps"
+SERVERCLASS = APPS_DIR / "deployment_server" / "serverclass.conf"
+DEPLOYMENT_TIMEOUT = 300
+PHONE_HOME_SCRIPT = """\
+set -e
+conf=/opt/splunk/etc/system/local/deploymentclient.conf
+if grep -q '^\\[deployment-client\\]' "$conf"; then
+  sed -i '/^\\[deployment-client\\]/a phoneHomeIntervalInSecs = 15' "$conf"
+else
+  printf '\\n[deployment-client]\\nphoneHomeIntervalInSecs = 15\\n' >> "$conf"
+fi
+"""
+
+
+def restart(stack: Stack, service: str) -> None:
+    """splunk stop, then start. Success is judged by splunk status."""
+    stack.splunk(service, "stop", timeout=RESTART_TIMEOUT)
+    stack.splunk(service, "start --answer-yes --no-prompt", timeout=RESTART_TIMEOUT)
+    wait_running(stack, service)
+
+
+def wait_running(stack: Stack, service: str) -> None:
+    wait_for(
+        f"splunk running on {service}",
+        lambda: True if splunk_running(stack, service) else None,
+        RESTART_TIMEOUT,
+        stack.stages,
+    )
+
+
+def apps_present(stack: Stack, service: str) -> list[str]:
+    output = stack.exec(service, "ls /opt/splunk/etc/apps\n")
+    return sorted(name for name in output.split() if name in (APP, CONFIG_APP))
+
+
+def install_distributed(
+    stack: Stack, package: Package, config_archive: Path
+) -> dict[str, object]:
+    """Indexer and search head by splunk install app, the forwarder from the
+    deployment server. Returns what the tests check about delivery."""
+    facts: dict[str, object] = {}
+    problems: list[str] = []
+    for service in ("idx", "sh"):
+        copy_package(stack, service, package)
+        install_app(stack, service, TARBALL_IN_CONTAINER)
+        restart(stack, service)
+        problems += verify_install(stack, service, package)
+
+    stack.exec("hf", PHONE_HOME_SCRIPT)
+    restart(stack, "hf")
+    facts["hf_apps_before_checkin"] = apps_present(stack, "hf")
+
+    copy_package(stack, "ds", package)
+    stack.cp(config_archive, "ds", CONFIG_IN_CONTAINER)
+    stack.exec(
+        "ds",
+        f"set -e\ntar -xzf {TARBALL_IN_CONTAINER} -C {DEPLOYMENT_APPS}\n"
+        f"tar -xzf {CONFIG_IN_CONTAINER} -C {DEPLOYMENT_APPS}\n",
+    )
+    facts["ds_script_mode"] = script_mode(stack, "ds", f"{DEPLOYMENT_APPS}/{APP}")
+    stack.cp(SERVERCLASS, "ds", "/opt/splunk/etc/system/local/serverclass.conf")
+    stack.exec(
+        "ds",
+        "chown splunk:splunk /opt/splunk/etc/system/local/serverclass.conf\n",
+        user="root",
+    )
+    stack.splunk("ds", "reload deploy-server")
+
+    wait_for(
+        "deployment delivery",
+        lambda: (
+            True if apps_present(stack, "hf") == sorted([APP, CONFIG_APP]) else None
+        ),
+        DEPLOYMENT_TIMEOUT,
+        stack.stages,
+    )
+    # restartSplunkd = true restarts the forwarder after delivery. Let it finish.
+    wait_running(stack, "hf")
+    time.sleep(30)
+    wait_running(stack, "hf")
+    stop_mark_start(stack, "hf", mark_from_target=True)
+    problems += verify_install(stack, "hf", package, deployed=True)
+    facts["hf_local"] = stack.exec(
+        "hf", f"ls /opt/splunk/etc/apps/{APP}/local 2>/dev/null || true\n"
+    ).split()
+    if problems:
+        raise stack.stages.fail("install", "; ".join(problems))
+    stack.stages.reached("install")
+    return facts

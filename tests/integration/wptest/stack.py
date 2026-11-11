@@ -163,6 +163,9 @@ class Stack:
         self.setup_error: BaseException | None = None
         self.mark = 0.0
         self.searchers: dict[str, Searcher] = {}
+        self.facts: dict[str, object] = {}
+
+    """What setup observed that the tests check, such as deployment delivery."""
 
     @property
     def splunk_services(self) -> tuple[str, ...]:
