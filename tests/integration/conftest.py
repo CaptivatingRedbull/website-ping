@@ -5,8 +5,10 @@ from __future__ import annotations
 import configparser
 import fcntl
 import os
+import shlex
 import shutil
 from collections.abc import Callable, Generator, Iterator
+from datetime import datetime
 from pathlib import Path
 from typing import IO
 from urllib.parse import urlparse
@@ -273,16 +275,13 @@ def _deliver_helpers(
     )
 
 
-def _probe(
-    stack: Stack, manager: StackManager, services: tuple[str, ...], with_target: bool
-) -> None:
+def _probe(stack: Stack, manager: StackManager, services: tuple[str, ...]) -> None:
     problems: list[str] = []
     results: dict[str, object] = {}
     for service in services:
-        result = stack.probe(service, with_target)
+        result = stack.probe(service)
         results[service] = {f"{h}:{p}": c for (h, p), c in result.classes.items()}
-        results[f"{service}.gateway"] = result.gateway
-        problems += result.problems(with_target)
+        problems += result.problems()
     manager.evidence.note(f"{stack.project}.probe", results)
     if problems:
         raise stack.stages.fail(PROBE, "; ".join(problems))
@@ -309,7 +308,7 @@ def _config_archive(manager: StackManager, app: str) -> Path:
 def setup_standalone(stack: Stack, manager: StackManager) -> None:
     _start(stack, manager)
     _deliver_helpers(stack, manager, ("so1",))
-    _probe(stack, manager, ("so1",), with_target=True)
+    _probe(stack, manager, ("so1",))
     install.install_single(
         stack, "so1", manager.package, _config_archive(manager, "standalone"), True
     )
@@ -322,8 +321,51 @@ def setup_standalone(stack: Stack, manager: StackManager) -> None:
     )
 
 
+def _logged_since(stack: Stack, service: str, text: str, since: float) -> bool:
+    """Whether splunkd.log has a line containing text, timestamped at or after since."""
+    output = stack.exec(
+        service,
+        f"grep -F {shlex.quote(text)} /opt/splunk/var/log/splunk/splunkd.log || true\n",
+    )
+    for line in output.splitlines():
+        stamp = " ".join(line.split()[:3])
+        try:
+            logged = datetime.strptime(stamp, "%m-%d-%Y %H:%M:%S.%f %z").timestamp()
+        except ValueError:
+            continue
+        if logged >= since:
+            return True
+    return False
+
+
+def setup_noroute(stack: Stack, manager: StackManager) -> None:
+    _start(stack, manager)
+    _deliver_helpers(stack, manager, ("so1",))
+    _probe(stack, manager, ("so1",))
+    install.install_single(
+        stack, "so1", manager.package, _config_archive(manager, "no_route"), True
+    )
+    install.wait_registered(stack, "so1", "no-direct-route", stack.stages)
+    wait_for(
+        STARTED,
+        lambda: (
+            True
+            if _logged_since(
+                stack,
+                "so1",
+                "stanza=web_ping://no-direct-route starting check",
+                stack.mark,
+            )
+            else None
+        ),
+        EVENT_TIMEOUT,
+        stack.stages,
+    )
+
+
 SETUPS: dict[str, Callable[[Stack, StackManager], None]] = {
     "standalone": setup_standalone,
+    "noroute": setup_noroute,
 }
 
 
@@ -426,6 +468,11 @@ def stacks(
 @pytest.fixture
 def standalone(stacks: StackManager, splunk_line: str) -> Stack:
     return stacks.get(splunk_line, "standalone")
+
+
+@pytest.fixture
+def no_route_stack(stacks: StackManager, splunk_line: str) -> Stack:
+    return stacks.get(splunk_line, "noroute")
 
 
 @pytest.fixture

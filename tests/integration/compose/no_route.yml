@@ -1,4 +1,5 @@
-# Single instance on one internal-only network, with no route out.
+# Single instance and target on one internal-only network, with no route out.
+# The target serves only the probe's controls; the stanza checks 192.0.2.10.
 # A published port is dropped on such a network, so results are read with exec.
 
 x-labels: &labels
@@ -20,6 +21,15 @@ services:
     volumes:
       - so1-etc:/opt/splunk/etc
       - so1-var:/opt/splunk/var
+
+  target:
+    image: python:3.13.18-slim
+    hostname: target
+    command: ["sh", "-c", "until [ -f /srv/go ]; do sleep 1; done; exec python -u /srv/server.py"]
+    labels: *labels
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
 
 networks:
   default:

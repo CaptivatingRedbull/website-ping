@@ -102,16 +102,10 @@ probe() {
   if [ $rc -eq 0 ]; then class=connected
   elif [ $rc -eq 124 ]; then class=filtered
   elif printf '%s' "$out" | grep -qi refused; then class=refused
+  elif printf '%s' "$out" | grep -qi 'network is unreachable'; then class=unreachable
   else class="other:$(printf '%s' "$out" | tr -s ' \n' '__' | tail -c 120)"; fi
   echo "$1 $2 $class"
 }
-gw_hex=$(awk '$2=="00000000" {print $3; exit}' /proc/net/route)
-if [ -n "$gw_hex" ]; then
-  gw=$(printf '%d.%d.%d.%d' 0x${gw_hex:6:2} 0x${gw_hex:4:2} 0x${gw_hex:2:2} 0x${gw_hex:0:2})
-else
-  gw=none
-fi
-echo "gateway $gw"
 """
 
 
@@ -137,26 +131,17 @@ exit 1
 @dataclass
 class ProbeResult:
     service: str
-    gateway: str
+    expected: dict[tuple[str, int], str]
     classes: dict[tuple[str, int], str] = field(
         default_factory=dict[tuple[str, int], str]
     )
 
-    def problems(self, expect_target: bool) -> list[str]:
-        expected: dict[tuple[str, int], str] = {}
-        if expect_target:
-            expected[("target", TARGET_PORT)] = "connected"
-            expected[("target", CLOSED_TARGET_PORT)] = "refused"
-        for host, port in self.classes:
-            if (host, port) not in expected:
-                expected[(host, port)] = "filtered"
-        missing = [key for key in expected if key not in self.classes]
+    def problems(self) -> list[str]:
         return [
-            f"{self.service}: no result for {host}:{port}" for host, port in missing
-        ] + [
-            f"{self.service}: {host}:{port} was {actual}, expected {expected[(host, port)]}"
-            for (host, port), actual in self.classes.items()
-            if actual != expected[(host, port)]
+            f"{self.service}: {host}:{port} was {self.classes.get((host, port), 'not tried')},"
+            f" expected {expected}"
+            for (host, port), expected in self.expected.items()
+            if self.classes.get((host, port)) != expected
         ]
 
 
@@ -293,27 +278,36 @@ class Stack:
             )
         return self.searchers[service]
 
-    def probe(self, service: str, with_target: bool) -> ProbeResult:
-        hosts = ["$gw", lan_address()]
+    def network_gateway(self) -> str:
+        """The host's address on the stack's network, from Docker's IPAM settings."""
+        network = f"{self.project}_default"
+        config = json.loads(
+            docker("network", "inspect", network, "--format", "{{json .IPAM.Config}}")
+        )
+        return str(cast("list[dict[str, object]]", config)[0]["Gateway"])
+
+    def probe(self, service: str) -> ProbeResult:
+        """Controls on the target, then the host's addresses on the four ports.
+
+        The firewall rule drops packets to the gateway, so it must be filtered.
+        The LAN address is filtered too, except on the internal-only network,
+        which has no route to it.
+        """
+        lan = "unreachable" if self.topology == "noroute" else "filtered"
+        expected = {
+            ("target", TARGET_PORT): "connected",
+            ("target", CLOSED_TARGET_PORT): "refused",
+        }
+        for port in HOST_PORTS:
+            expected[(self.network_gateway(), port)] = "filtered"
+            expected[(lan_address(), port)] = lan
         lines = [PROBE_SCRIPT]
-        if with_target:
-            lines += [
-                f"probe target {TARGET_PORT} &",
-                f"probe target {CLOSED_TARGET_PORT} &",
-            ]
-        lines += [
-            f'[ "$gw" != none ] && probe "{host}" {port} &' if host == "$gw"
-            else f"probe {host} {port} &"
-            for host in hosts
-            for port in HOST_PORTS
-        ]  # fmt: skip
+        lines += [f"probe {host} {port} &" for host, port in expected]
         lines.append("wait")
         output = self.exec(service, "\n".join(lines) + "\n", timeout=60)
-        result = ProbeResult(service, gateway="none")
+        result = ProbeResult(service, expected)
         for line in output.splitlines():
             parts = line.split()
-            if parts[:1] == ["gateway"]:
-                result.gateway = parts[1]
-            elif len(parts) == 3:
+            if len(parts) == 3:
                 result.classes[(parts[0], int(parts[1]))] = parts[2]
         return result
