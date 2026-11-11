@@ -8,10 +8,9 @@ Ubuntu 26.04 (`resolute`), Docker's data under `/data/docker`, the LAN on
 The install ran on 2026-11-10 between 11:50 and 11:52 UTC. The before and after
 records are in `~/docker-install-records/before` and `~/docker-install-records/after`.
 
-**About "TO CONFIRM".** The records hold the output of each step, not the
-commands typed. Every command below is marked **TO CONFIRM** until the developer
-confirms it is the one that was run. The "Recorded result" lines are taken from
-the records and the current system, and are confirmed.
+The commands in steps 1 to 7 were confirmed by the developer on 2026-11-11 as
+the ones that were run. The "Recorded result" lines are taken from the records
+and the current system. The uninstall steps in section 9 have never been run.
 
 ## 1. Before-install records
 
@@ -19,13 +18,13 @@ Run before anything is installed, so the uninstall can be checked against them.
 
 ```sh
 mkdir -p ~/docker-install-records/before && cd ~/docker-install-records/before
-ip addr > ip-addr.txt                                         # TO CONFIRM
-ip route > ip-route.txt                                       # TO CONFIRM
-sysctl net.ipv4.ip_forward > ip-forward.txt                   # TO CONFIRM
-sudo iptables-save > iptables.txt                             # TO CONFIRM
-sudo nft list ruleset > nft.txt                               # TO CONFIRM
-sudo ufw status verbose > ufw.txt                             # TO CONFIRM
-systemctl show Splunkd -p ActiveEnterTimestamp -p MainPID > splunkd.txt   # TO CONFIRM
+ip addr > ip-addr.txt
+ip route > ip-route.txt
+sysctl net.ipv4.ip_forward > ip-forward.txt
+sudo iptables-save > iptables.txt
+sudo nft list ruleset > nft.txt
+sudo ufw status verbose > ufw.txt
+systemctl show Splunkd -p ActiveEnterTimestamp -p MainPID > splunkd.txt
 ```
 
 Recorded result (11:50:07 UTC):
@@ -44,8 +43,8 @@ addresses and this data root. The bridge `10.212.0.1/24` and the pool
 step 4 covers.
 
 ```sh
-sudo mkdir -p /etc/docker                                     # TO CONFIRM
-sudo tee /etc/docker/daemon.json <<'EOF'                      # TO CONFIRM
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json <<'EOF'
 {
   "data-root": "/data/docker",
   "bip": "10.212.0.1/24",
@@ -60,12 +59,12 @@ Recorded result: `/etc/docker/daemon.json`, owner root, mode 644, written at
 ## 3. systemd drop-in: start Docker only when `/data` is mounted
 
 ```sh
-sudo mkdir -p /etc/systemd/system/docker.service.d             # TO CONFIRM
-sudo tee /etc/systemd/system/docker.service.d/10-require-data.conf <<'EOF'   # TO CONFIRM
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo tee /etc/systemd/system/docker.service.d/10-require-data.conf <<'EOF'
 [Unit]
 RequiresMountsFor=/data
 EOF
-sudo systemctl daemon-reload                                   # TO CONFIRM
+sudo systemctl daemon-reload
 ```
 
 Recorded result: the file exists with that content, written at 11:50, and
@@ -80,7 +79,7 @@ no later rule can allow the traffic. The rule also covers ports where nothing
 listens today.
 
 ```sh
-sudo ufw insert 1 deny proto tcp from 10.212.0.0/15 to any port 8000,8088,8089,9997   # TO CONFIRM
+sudo ufw insert 1 deny proto tcp from 10.212.0.0/15 to any port 8000,8088,8089,9997
 ```
 
 Recorded result (`after/iptables.txt`), the first rule in `ufw-user-input`,
@@ -95,13 +94,13 @@ The records hold no `ufw status` taken after the install.
 ## 5. Install Docker Engine from Docker's repository
 
 ```sh
-sudo install -m 0755 -d /etc/apt/keyrings                                         # TO CONFIRM
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc   # TO CONFIRM
-sudo chmod a+r /etc/apt/keyrings/docker.asc                                       # TO CONFIRM
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu resolute stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list                                  # TO CONFIRM
-sudo apt-get update                                                               # TO CONFIRM
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin   # TO CONFIRM
+  | sudo tee /etc/apt/sources.list.d/docker.list
+sudo apt-get update
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
 Recorded result:
@@ -119,7 +118,7 @@ Membership in this group is equivalent to root on this host. The harness never
 runs privileged containers and never mounts the Docker socket.
 
 ```sh
-sudo usermod -aG docker "$USER"                               # TO CONFIRM
+sudo usermod -aG docker "$USER"
 ```
 
 Recorded result: `getent group docker` shows `docker:x:983:snape`. A shell
@@ -130,13 +129,13 @@ started before this step has no access to Docker. Run commands as
 
 ```sh
 mkdir -p ~/docker-install-records/after && cd ~/docker-install-records/after
-ip addr > ip-addr.txt                                         # TO CONFIRM
-ip route > ip-route.txt                                       # TO CONFIRM
-sysctl net.ipv4.ip_forward > ip-forward.txt                   # TO CONFIRM
-sudo iptables-save > iptables.txt                             # TO CONFIRM
-sudo nft list ruleset > nft.txt                               # TO CONFIRM
-systemctl show Splunkd -p ActiveEnterTimestamp -p MainPID > splunkd.txt   # TO CONFIRM
-docker info --format '{{.DockerRootDir}}'                     # TO CONFIRM
+ip addr > ip-addr.txt
+ip route > ip-route.txt
+sysctl net.ipv4.ip_forward > ip-forward.txt
+sudo iptables-save > iptables.txt
+sudo nft list ruleset > nft.txt
+systemctl show Splunkd -p ActiveEnterTimestamp -p MainPID > splunkd.txt
+docker info --format '{{.DockerRootDir}}'
 ```
 
 Compare with the before records. Recorded result (11:52:24 UTC):
@@ -162,20 +161,20 @@ and this runbook.
 
 ## 9. Uninstall
 
-These steps have not been run. Remove all test objects first with
-`scripts/test-clean.sh`.
+These steps have never been run, so they are untested. Remove all test
+objects first with `scripts/test-clean.sh`.
 
 ```sh
-sudo systemctl stop docker.socket docker.service containerd.service             # TO CONFIRM
+sudo systemctl stop docker.socket docker.service containerd.service
 sudo apt-get purge docker-ce docker-ce-cli containerd.io docker-buildx-plugin \
-  docker-compose-plugin docker-ce-rootless-extras                               # TO CONFIRM
-sudo rm /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.asc        # TO CONFIRM
-sudo rm /etc/docker/daemon.json                                                 # TO CONFIRM
-sudo rm /etc/systemd/system/docker.service.d/10-require-data.conf               # TO CONFIRM
-sudo systemctl daemon-reload                                                    # TO CONFIRM
-sudo ufw delete deny proto tcp from 10.212.0.0/15 to any port 8000,8088,8089,9997   # TO CONFIRM
-sudo gpasswd -d "$USER" docker                                                  # TO CONFIRM
-sudo sysctl -w net.ipv4.ip_forward=0                                            # TO CONFIRM
+  docker-compose-plugin docker-ce-rootless-extras
+sudo rm /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.asc
+sudo rm /etc/docker/daemon.json
+sudo rm /etc/systemd/system/docker.service.d/10-require-data.conf
+sudo systemctl daemon-reload
+sudo ufw delete deny proto tcp from 10.212.0.0/15 to any port 8000,8088,8089,9997
+sudo gpasswd -d "$USER" docker
+sudo sysctl -w net.ipv4.ip_forward=0
 ```
 
 Docker's chains, the `nat` rules and the `docker0` interface stay until the
