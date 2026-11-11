@@ -16,10 +16,10 @@ from wptest.stack import SPLUNK, Stack
 from wptest.wait import Stages, wait_for
 
 ROOT = Path(__file__).absolute().parents[3]
-APP = "website-ping"
+APP = "website_ping"
 CONFIG_APP = "website_ping_inputs"
 APPS_DIR = ROOT / "tests" / "integration" / "apps"
-TARBALL_IN_CONTAINER = "/tmp/website-ping.tar.gz"
+TARBALL_IN_CONTAINER = "/tmp/website_ping.tar.gz"
 CONFIG_IN_CONTAINER = "/tmp/website_ping_inputs.tar.gz"
 EXECUTABLE = "bin/web_ping.py"
 EXTRA_ALLOWED = ("bin/__pycache__/", "local/")

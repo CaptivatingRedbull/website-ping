@@ -27,7 +27,3 @@ passed. A failure before those stages is a harness or environment problem.
 Until the certificate defect is fixed, `tls-valid` passes without proving that
 verification works. A release requires that this list contains no certificate
 defect.
-
-On a fresh clone the session also stops at the build stage and
-`tests/test_package_contents.py` fails, because `scripts/package.py` needs the
-untracked, empty `static` folder.

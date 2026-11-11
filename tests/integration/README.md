@@ -22,8 +22,6 @@ A bare `pytest` never runs them. They run only when a command-line path names
   plus 4 GB: about 6.5 GB for the standalone stack and 13.25 GB for the
   distributed one.
 * The test requirements: `pip install -r requirements-test.txt`.
-* An empty `static` folder at the repository root. `scripts/package.py` fails
-  without it (a known defect).
 
 ## Splunk's terms
 

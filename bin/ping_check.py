@@ -6,7 +6,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import IO, Optional, cast
+from typing import IO, cast
 
 from compat import override
 from logger import log
@@ -42,7 +42,7 @@ class LimitedRedirectHandler(urllib.request.HTTPRedirectHandler):
         msg: str,
         headers: http.client.HTTPMessage,
         newurl: str,
-    ) -> Optional[urllib.request.Request]:
+    ) -> urllib.request.Request | None:
         if self.followed >= self.max_redirects:
             self.limit_reached = True
             return None
@@ -73,7 +73,7 @@ def _fetch(
     try:
         response = cast(http.client.HTTPResponse, opener.open(request, timeout=timeout))
         with response:
-            return int(response.status), _drain(response, deadline)
+            return response.status, _drain(response, deadline)
     except urllib.error.HTTPError as exc:
         with exc:
             return exc.code, _drain(exc, deadline)
@@ -108,7 +108,7 @@ def check_url(settings: Settings) -> CheckResult:
         return result(0, error=_describe(detail))
     except (OSError, http.client.HTTPException) as exc:
         return result(0, error=_describe(exc))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - last resort, a check must always produce an event
         log.exception("unexpected error during check")
         return result(0, error="unexpected " + _describe(exc))
     if not complete:

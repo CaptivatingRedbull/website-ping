@@ -84,6 +84,6 @@ if __name__ == "__main__":
         log.error("invalid configuration: %s", e)
         sys.exit(1)
 
-    except Exception:
+    except Exception:  # noqa: BLE001 - last resort, the process must log and exit 1
         log.exception("unhandled error")
         sys.exit(1)

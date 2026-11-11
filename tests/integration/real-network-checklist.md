@@ -16,7 +16,7 @@ the harness's stanza URL check does not apply to them.
 From the repository root, with Docker access:
 
 ```sh
-python scripts/package.py                     # prints dist/website-ping-<version>.tar.gz
+python scripts/package.py                     # prints dist/website_ping-<version>.tar.gz
 LINE_IMAGE=splunk/splunk:10.6.1.1             # or splunk/splunk:9.4.17
 ENV_FILE=$(mktemp) && chmod 600 "$ENV_FILE"
 printf 'SPLUNK_PASSWORD=%s\nSPLUNK_START_ARGS=--accept-license\nSPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com\n' \
@@ -40,9 +40,9 @@ until docker inspect -f '{{.State.Health.Status}}' wptest-realnet | grep -q heal
 ## 3. Install the app and the stanzas
 
 ```sh
-docker cp dist/website-ping-*.tar.gz wptest-realnet:/tmp/website-ping.tar.gz
+docker cp dist/website_ping-*.tar.gz wptest-realnet:/tmp/website_ping.tar.gz
 docker exec -u splunk -e SPLUNK_USERNAME=admin wptest-realnet \
-  /opt/splunk/bin/splunk install app /tmp/website-ping.tar.gz
+  /opt/splunk/bin/splunk install app /tmp/website_ping.tar.gz
 docker exec -i -u splunk wptest-realnet bash -c \
   'mkdir -p /opt/splunk/etc/apps/wptest_realnet/local && cat > /opt/splunk/etc/apps/wptest_realnet/local/inputs.conf' <<'EOF'
 [web_ping://realnet-valid]

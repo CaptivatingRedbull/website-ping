@@ -17,7 +17,7 @@ pytestmark = pytest.mark.single
 
 SECOND_EVENT_TIMEOUT = 420
 EVENT_TIMEOUT = 120
-APP_INPUTS = "/opt/splunk/etc/apps/website-ping/default/inputs.conf"
+APP_INPUTS = "/opt/splunk/etc/apps/website_ping/default/inputs.conf"
 
 
 def errors_query(since: float, stanza_filter: str) -> str:
