@@ -1,0 +1,5 @@
+pytest==8.4.2
+pytest-cov==7.1.0
+splunk-appinspect==4.4.0
+ruff==0.17.4
+pyright==1.1.414

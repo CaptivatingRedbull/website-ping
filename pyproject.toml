@@ -1,6 +1,13 @@
 [tool.pytest.ini_options]
-pythonpath = ["bin"]
+pythonpath = ["bin", "tests/integration"]
 testpaths = ["tests"]
+markers = [
+    "single: single-instance install and event tests against Splunk in Docker",
+    "network: network failure scenarios against Splunk in Docker",
+    "no_route: the no-direct-route scenario on an internal-only network",
+    "distributed: deployment and event path tests on the distributed stack",
+    "release: checks required only for a release",
+]
 
 [tool.coverage.run]
 source = ["bin"]
@@ -10,7 +17,7 @@ branch = true
 show_missing = true
 
 [tool.pyright]
-extraPaths = ["bin"]
+extraPaths = ["bin", "tests/integration"]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.9"
