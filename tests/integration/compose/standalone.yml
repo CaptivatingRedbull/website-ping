@@ -1,0 +1,70 @@
+# Single instance, target web server and Squid on one bridge network.
+# Variables come from the env file written by wptest/stack.py.
+
+x-labels: &labels
+  website-ping.test: "true"
+  website-ping.kept: "${WPTEST_KEPT:-false}"
+
+x-splunk-env: &splunk-env
+  SPLUNK_START_ARGS: ${SPLUNK_START_ARGS:?Splunk licence not accepted}
+  SPLUNK_GENERAL_TERMS: ${SPLUNK_GENERAL_TERMS:?Splunk General Terms not accepted}
+  SPLUNK_PASSWORD: ${WPTEST_PASSWORD:?}
+
+services:
+  so1:
+    image: ${WPTEST_SPLUNK_IMAGE:?}
+    hostname: so1
+    environment:
+      <<: *splunk-env
+      SSL_CERT_FILE: /tmp/wptest-ca.pem
+      HTTP_PROXY: http://squid:3128
+      HTTPS_PROXY: http://squid:3128
+      http_proxy: http://squid:3128
+      https_proxy: http://squid:3128
+      NO_PROXY: localhost,127.0.0.1
+      no_proxy: localhost,127.0.0.1
+    labels: *labels
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 2
+    ports:
+      - "127.0.0.1::8089"
+    volumes:
+      - so1-etc:/opt/splunk/etc
+      - so1-var:/opt/splunk/var
+
+  target:
+    image: python:3.13.18-slim
+    hostname: target
+    command: ["sh", "-c", "until [ -f /srv/go ]; do sleep 1; done; exec python -u /srv/server.py"]
+    labels: *labels
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
+
+  squid:
+    build:
+      context: ../squid
+      labels: *labels
+    hostname: squid
+    labels: *labels
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
+    volumes:
+      - squid-log:/var/log/squid
+      - squid-spool:/var/spool/squid
+
+networks:
+  default:
+    labels: *labels
+
+volumes:
+  so1-etc:
+    labels: *labels
+  so1-var:
+    labels: *labels
+  squid-log:
+    labels: *labels
+  squid-spool:
+    labels: *labels
