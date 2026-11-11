@@ -95,10 +95,15 @@ docker exec -u splunk -e SPLUNK_USERNAME=admin wptest-realnet /opt/splunk/bin/sp
 The three certificate rows cannot pass until the app verifies certificates
 inside Splunk (see `expected_failures.md`). A release requires them to pass.
 
+These rows depend on public sites. A `ConnectionResetError` or a timeout on a
+badssl.com row is the site, not the app: run that line again before recording
+a result.
+
 ## 5. Remove the container
 
 ```sh
 docker stop wptest-realnet      # --rm removes it and its volumes
+while docker ps -aq --filter name=wptest-realnet | grep -q .; do sleep 1; done
 rm -f "$ENV_FILE"
 scripts/test-clean.sh
 ```
