@@ -218,7 +218,10 @@ def test_rejects_host_docker_internal_in_any_value() -> None:
 
 
 def test_stanza_hosts_accepted() -> None:
-    assert check_stanza_urls(["target", "wptest.invalid", "192.0.2.10"]) == []
+    assert (
+        check_stanza_urls(["target", "env-proxied", "wptest.invalid", "192.0.2.10"])
+        == []
+    )
 
 
 @pytest.mark.parametrize(

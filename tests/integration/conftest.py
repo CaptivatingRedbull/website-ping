@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 import pytest
 from wptest import evidence as evidence_module
 from wptest import host_snapshot, install, preflight
-from wptest.certs import Certificates, generate
+from wptest.certs import SPLUNK_CERT_DIR, Certificates, generate
 from wptest.evidence import Evidence
 from wptest.install import APPS_DIR, Package
 from wptest.stack import (
@@ -270,14 +270,29 @@ class StackManager:
 def _deliver_helpers(
     stack: Stack, manager: StackManager, splunk: tuple[str, ...]
 ) -> None:
-    """Certificates and target code copied in, then the target is started."""
+    """Certificates and target code copied in, then the target is started.
+
+    Splunk containers get the CA at /tmp/wptest-ca.pem (SSL_CERT_FILE in the
+    standalone stack) and the CA and client certificate files in SPLUNK_CERT_DIR.
+    """
     for service in splunk:
         stack.cp(manager.certificates.ca, service, "/tmp/wptest-ca.pem")
+        stack.exec(service, f"mkdir -p {SPLUNK_CERT_DIR}\n", user="root")
+        for path in manager.certificates.splunk_files:
+            stack.cp(path, service, f"{SPLUNK_CERT_DIR}/{path.name}")
+        stack.exec(
+            service,
+            f"chown -R splunk:splunk {SPLUNK_CERT_DIR}\n"
+            f"chmod 0644 {SPLUNK_CERT_DIR}/ca.pem {SPLUNK_CERT_DIR}/client.pem\n"
+            f"chmod 0600 {SPLUNK_CERT_DIR}/client.key"
+            f" {SPLUNK_CERT_DIR}/client-combined.pem\n",
+            user="root",
+        )
     if "target" not in stack.compose("config", "--services").split():
         return
     stack.exec("target", "mkdir -p /srv/certs\n", user="root")
     stack.cp(INTEGRATION / "target" / "server.py", "target", "/srv/server.py")
-    for path in manager.certificates.server_files:
+    for path in [manager.certificates.ca, *manager.certificates.server_files]:
         stack.cp(path, "target", f"/srv/certs/{path.name}")
     stack.exec("target", "touch /srv/go\n", user="root")
     wait_for(
@@ -294,8 +309,12 @@ def _probe(stack: Stack, manager: StackManager, services: tuple[str, ...]) -> No
     results: dict[str, object] = {}
     for service in services:
         result = stack.probe(service)
-        results[service] = {f"{h}:{p}": c for (h, p), c in result.classes.items()}
-        problems += result.problems()
+        helpers = stack.probe_helpers(service)
+        results[service] = {
+            **{f"{h}:{p}": c for (h, p), c in result.classes.items()},
+            **helpers.codes,
+        }
+        problems += result.problems() + helpers.problems()
     manager.evidence.note(f"{stack.project}.probe", results)
     if problems:
         raise stack.stages.fail(PROBE, "; ".join(problems))

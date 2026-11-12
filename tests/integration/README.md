@@ -60,13 +60,16 @@ The main Splunk on this host must not be disturbed. The session enforces this:
   an allowed list. A fixed host port, `privileged`, host networking, bind
   mounts, a missing memory or CPU limit, a missing label or any setting not on
   the list stops the session. Test stanza URLs may name only `target`,
-  `wptest.invalid` and `192.0.2.10`.
+  `env-proxied` (an alias of the target), `wptest.invalid` and `192.0.2.10`.
 * **Host snapshot.** The main `splunkd` process ID, start time and the
   listeners on ports 8000, 8088, 8089 and 9997 are recorded at the start and
   compared at the end. Any difference fails the session.
 * **Probe.** Before installing anything, each Splunk container must reach the
   target, be refused on a closed port, and be blocked from the host's ports:
-  filtered by the firewall rule, or unreachable on the no-route stack.
+  filtered by the firewall rule, or unreachable on the no-route stack. It must
+  also pass the mTLS port 8447 with the client certificate (split and combined
+  files) and be refused without it, and, where Squid runs, get through 3128,
+  through 3129 with the proxy user, and a 407 from 3129 without it.
 * **Resource gate.** Before each stack, free disk and available memory are
   checked again.
 * **One session at a time.** `tests/integration/.evidence/run.lock` is held for

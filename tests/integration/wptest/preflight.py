@@ -9,7 +9,9 @@ from typing import cast
 LABEL = "website-ping.test"
 MIN_FREE_DISK = 200 * 1024**3
 DATA_ROOT = "/data/docker"
-ALLOWED_STANZA_HOSTS = frozenset({"target", "wptest.invalid", "192.0.2.10"})
+ALLOWED_STANZA_HOSTS = frozenset(
+    {"target", "env-proxied", "wptest.invalid", "192.0.2.10"}
+)
 FORBIDDEN_TEXT = "host.docker.internal"
 
 TOP_KEYS = frozenset({"name", "services", "networks", "volumes"})

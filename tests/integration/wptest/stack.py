@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
+from wptest.certs import SPLUNK_CERT_DIR
 from wptest.splunk_rest import Searcher, SplunkCli, SplunkRest
 from wptest.versions import LINES
 from wptest.wait import Stages
@@ -32,6 +33,10 @@ HOST_PORTS = (8000, 8088, 8089, 9997)
 SPLUNK = "/opt/splunk/bin/splunk"
 TARGET_PORT = 8080
 CLOSED_TARGET_PORT = 8090
+MTLS_PORT = 8447
+SQUID_AUTH_PORT = 3129
+PROXY_USER = "wpproxy"
+PROXY_PASSWORD = "wpproxy-secret"
 
 
 def docker(*args: str, stdin: str | None = None, timeout: float = 900) -> str:
@@ -144,6 +149,61 @@ class ProbeResult:
             f" expected {expected}"
             for (host, port), expected in self.expected.items()
             if self.classes.get((host, port)) != expected
+        ]
+
+
+HELPER_PROBE_SCRIPT = r"""
+check() {
+  name=$1; shift
+  code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$@" 2>/dev/null)
+  echo "$name ${code:-000}"
+}
+"""
+
+
+def helper_checks(with_squid: bool) -> dict[str, tuple[str, str]]:
+    """Check name: (curl arguments, expected HTTP code; 000 = no HTTP response)."""
+    mtls = f"--noproxy '*' --cacert {SPLUNK_CERT_DIR}/ca.pem"
+    url = f"https://target:{MTLS_PORT}/__probe"
+    split = f"--cert {SPLUNK_CERT_DIR}/client.pem --key {SPLUNK_CERT_DIR}/client.key"
+    checks = {
+        "mtls-split": (f"{mtls} {split} {url}/split", "200"),
+        "mtls-combined": (
+            f"{mtls} --cert {SPLUNK_CERT_DIR}/client-combined.pem {url}/combined",
+            "200",
+        ),
+        "mtls-no-cert": (f"{mtls} {url}/no-cert", "000"),
+    }
+    if with_squid:
+        target = f"http://target:{TARGET_PORT}/status/200"
+        # --noproxy '' overrides NO_PROXY, which lists target; otherwise curl goes direct.
+        via = "--noproxy '' -x"
+        auth_proxy = f"http://squid:{SQUID_AUTH_PORT}"
+        checks.update(
+            {
+                "squid-open": (f"{via} http://squid:3128 {target}", "200"),
+                "squid-auth": (
+                    f"{via} {auth_proxy} -U {PROXY_USER}:{PROXY_PASSWORD} {target}",
+                    "200",
+                ),
+                "squid-no-auth": (f"{via} {auth_proxy} {target}", "407"),
+            }
+        )
+    return checks
+
+
+@dataclass
+class HelperProbe:
+    service: str
+    expected: dict[str, str]
+    codes: dict[str, str] = field(default_factory=dict[str, str])
+
+    def problems(self) -> list[str]:
+        return [
+            f"{self.service}: {name} gave {self.codes.get(name, 'nothing')},"
+            f" expected {expected}"
+            for name, expected in self.expected.items()
+            if self.codes.get(name) != expected
         ]
 
 
@@ -291,6 +351,24 @@ class Stack:
             docker("network", "inspect", network, "--format", "{{json .IPAM.Config}}")
         )
         return str(cast("list[dict[str, object]]", config)[0]["Gateway"])
+
+    def probe_helpers(self, service: str) -> HelperProbe:
+        """The mTLS port with and without the client certificate, and Squid if present."""
+        with_squid = "squid" in self.compose("config", "--services").split()
+        checks = helper_checks(with_squid)
+        lines = [HELPER_PROBE_SCRIPT]
+        lines += [
+            f"check {name} {arguments}" for name, (arguments, _) in checks.items()
+        ]
+        output = self.exec(service, "\n".join(lines) + "\n", timeout=120)
+        result = HelperProbe(
+            service, {name: code for name, (_, code) in checks.items()}
+        )
+        for line in output.splitlines():
+            parts = line.split()
+            if len(parts) == 2:
+                result.codes[parts[0]] = parts[1]
+        return result
 
     def probe(self, service: str) -> ProbeResult:
         """Controls on the target, then the host's addresses on the four ports.

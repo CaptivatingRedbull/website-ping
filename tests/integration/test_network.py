@@ -81,7 +81,8 @@ def squid_lines(stack: Stack, user_agent: str) -> int:
 def check_proxy_ignored(stack: Stack) -> None:
     control = stack.exec(
         "so1",
-        f"curl -sS -o /dev/null -w '%{{http_code}}' -x {PROXY} -A wptest-control {T}/status/200\n",
+        f"curl -sS -o /dev/null -w '%{{http_code}}' --noproxy '' -x {PROXY}"
+        f" -A wptest-control {T}/status/200\n",
     )
     assert control.strip() == "200", (
         f"control request through Squid returned {control!r}"
