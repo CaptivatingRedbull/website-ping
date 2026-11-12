@@ -29,7 +29,7 @@ from wptest.stack import (
     write_env_file,
 )
 from wptest.versions import LINES
-from wptest.wait import HEALTHY, PROBE, STARTED, Stages, wait_for
+from wptest.wait import HEALTHY, INSTALL, PROBE, STARTED, Stages, wait_for
 
 TERMS_VAR = "WPTEST_ACCEPT_SPLUNK_TERMS"
 EXTRA_COMPOSE_VAR = "WPTEST_EXTRA_COMPOSE"
@@ -41,8 +41,10 @@ TOPOLOGY_OF_MARKER = {
     "network": "standalone",
     "no_route": "noroute",
     "distributed": "distributed",
+    "spike": "spike",
 }
-TOPOLOGY_ORDER = ("standalone", "noroute", "distributed")
+TOPOLOGY_ORDER = ("standalone", "noroute", "spike", "distributed")
+OPT_IN_MARKERS = ("spike",)
 MANAGER_KEY = pytest.StashKey["StackManager"]()
 
 
@@ -63,9 +65,21 @@ def _topology(item: pytest.Item) -> str | None:
     return None
 
 
+def _deselect_opt_in(config: pytest.Config, items: list[pytest.Item]) -> None:
+    expression = str(config.getoption("markexpr") or "")
+    skipped = [m for m in OPT_IN_MARKERS if m not in expression]
+    deselected = [i for i in items if any(i.get_closest_marker(m) for m in skipped)]
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = [i for i in items if i not in deselected]
+
+
 @pytest.hookimpl(trylast=True)
-def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Group tests by line, then topology, so each stack starts once."""
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Drop opt-in tests, then group by line and topology so each stack starts once"""
+    _deselect_opt_in(config, items)
     lines = list(LINES)
 
     def key(item: pytest.Item) -> tuple[int, int]:
@@ -102,7 +116,7 @@ def compose_files() -> list[Path]:
     extra = [
         Path(p) for p in os.environ.get(EXTRA_COMPOSE_VAR, "").split(os.pathsep) if p
     ]
-    return [*COMPOSE_FILES.values(), *extra]
+    return [*dict.fromkeys(COMPOSE_FILES.values()), *extra]
 
 
 def run_preflight(lines: list[str], workdir: Path) -> list[preflight.Violation]:
@@ -245,7 +259,7 @@ class StackManager:
             return
         if stack.failed:
             self.save_failure(stack)
-        if stack.failed and self.keep and self.kept is None:
+        if (stack.failed or stack.keep_requested) and self.keep and self.kept is None:
             self.kept = stack
             path = self.evidence.save_password(stack.password)
             print(f"\nkept stack {stack.project}; admin password in {path}")
@@ -381,10 +395,24 @@ def setup_distributed(stack: Stack, manager: StackManager) -> None:
     )
 
 
+def setup_spike(stack: Stack, manager: StackManager) -> None:
+    """Standalone compose file with only the probe app installed (commit 02)."""
+    _start(stack, manager)
+    _deliver_helpers(stack, manager, ("so1",))
+    _probe(stack, manager, ("so1",))
+    stack.cp(
+        install.build_probe_app(manager.workdir), "so1", install.PROBE_IN_CONTAINER
+    )
+    install.install_app(stack, "so1", install.PROBE_IN_CONTAINER)
+    install.stop_mark_start(stack, "so1", mark_from_target=False)
+    stack.stages.reached(INSTALL)
+
+
 SETUPS: dict[str, Callable[[Stack, StackManager], None]] = {
     "standalone": setup_standalone,
     "noroute": setup_noroute,
     "distributed": setup_distributed,
+    "spike": setup_spike,
 }
 
 
@@ -497,6 +525,11 @@ def no_route_stack(stacks: StackManager, splunk_line: str) -> Stack:
 @pytest.fixture
 def distributed_stack(stacks: StackManager, splunk_line: str) -> Stack:
     return stacks.get(splunk_line, "distributed")
+
+
+@pytest.fixture
+def spike_stack(stacks: StackManager, splunk_line: str) -> Stack:
+    return stacks.get(splunk_line, "spike")
 
 
 @pytest.fixture

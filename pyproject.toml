@@ -7,6 +7,7 @@ markers = [
     "no_route: the no-direct-route scenario on an internal-only network",
     "distributed: deployment and event path tests on the distributed stack",
     "release: checks required only for a release",
+    "spike: throwaway probes only run when -m names spike",
 ]
 
 [tool.coverage.run]

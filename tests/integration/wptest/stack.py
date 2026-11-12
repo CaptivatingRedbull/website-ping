@@ -20,11 +20,13 @@ COMPOSE_FILES = {
     "standalone": COMPOSE_DIR / "standalone.yml",
     "noroute": COMPOSE_DIR / "no_route.yml",
     "distributed": COMPOSE_DIR / "distributed.yml",
+    "spike": COMPOSE_DIR / "standalone.yml",
 }
 SPLUNK_SERVICES = {
     "standalone": ("so1",),
     "noroute": ("so1",),
     "distributed": ("ds", "idx", "sh", "hf"),
+    "spike": ("so1",),
 }
 HOST_PORTS = (8000, 8088, 8089, 9997)
 SPLUNK = "/opt/splunk/bin/splunk"
@@ -161,6 +163,7 @@ class Stack:
         self.stages = Stages()
         self.failed = False
         self.setup_error: BaseException | None = None
+        self.keep_requested = False
         self.mark = 0.0
         self.searchers: dict[str, Searcher] = {}
         self.facts: dict[str, object] = {}

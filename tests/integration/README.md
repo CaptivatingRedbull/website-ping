@@ -37,6 +37,7 @@ pytest tests/integration -m "single or network"   # standalone stack, both lines
 pytest tests/integration -m no_route               # no-route stack
 pytest tests/integration -m distributed            # distributed stack
 pytest tests/integration -m release                # AppInspect on the tarball
+pytest tests/integration -m spike --splunk-line 9.4 -k standalone --keep
 pytest tests/integration                           # everything, one stack at a time
 ```
 

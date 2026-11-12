@@ -18,6 +18,8 @@ from wptest.wait import Stages, wait_for
 ROOT = Path(__file__).absolute().parents[3]
 APP = "website_ping"
 CONFIG_APP = "website_ping_inputs"
+PROBE_APP = "wptest_probe"
+PROBE_IN_CONTAINER = f"/tmp/{PROBE_APP}.tar.gz"
 APPS_DIR = ROOT / "tests" / "integration" / "apps"
 TARBALL_IN_CONTAINER = "/tmp/website_ping.tar.gz"
 CONFIG_IN_CONTAINER = "/tmp/website_ping_inputs.tar.gz"
@@ -130,13 +132,13 @@ def build_package() -> Package:
     )
 
 
-def build_config_app(source: Path, output: Path) -> Path:
+def build_config_app(source: Path, output: Path, top: str = CONFIG_APP) -> Path:
     """Archive a config app: top folder website_ping_inputs, uid 0, 644 files, 755 folders."""
     with tarfile.open(output, "w:gz") as tar:
         paths = sorted(source.rglob("*"))
         for path in [source, *paths]:
             relative = path.relative_to(source).as_posix()
-            name = CONFIG_APP if relative == "." else f"{CONFIG_APP}/{relative}"
+            name = top if relative == "." else f"{top}/{relative}"
             info = tarfile.TarInfo(name)
             info.uid = info.gid = 0
             info.mtime = int(time.time())
@@ -146,11 +148,18 @@ def build_config_app(source: Path, output: Path) -> Path:
                 tar.addfile(info)
             else:
                 data = path.read_bytes()
-                info.mode = 0o644
+                script = relative.startswith("bin/") and path.suffix == ".py"
+                info.mode = 0o755 if script else 0o644
                 info.size = len(data)
                 tar.addfile(info, io.BytesIO(data))
     output.chmod(0o644)
     return output
+
+
+def build_probe_app(folder: Path) -> Path:
+    return build_config_app(
+        APPS_DIR / "probe", folder / f"{PROBE_APP}.tar.gz", top=PROBE_APP
+    )
 
 
 def install_app(stack: Stack, service: str, archive: str) -> None:
