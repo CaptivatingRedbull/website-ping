@@ -1,0 +1,40 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=\"\" total_time=\"\" request_time=\"\" timed_out=True title=timeout url=http://target:8081/ timeout=5 proxy_server=\"\" proxy_type=http proxy_port=\"\"",
+      "fields": {
+        "_time": "<time>",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "",
+        "response_code": "",
+        "source": "web_ping://timeout",
+        "sourcetype": "web_ping",
+        "timed_out": "True",
+        "timeout": "5",
+        "timestamp": "none",
+        "title": "timeout",
+        "total_time": "",
+        "url": "http://target:8081/"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "",
+      "path": "",
+      "port": 8081,
+      "status": 0,
+      "user_agent": ""
+    }
+  ],
+  "title": "timeout"
+}

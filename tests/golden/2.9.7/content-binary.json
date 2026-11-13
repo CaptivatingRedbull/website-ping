@@ -1,0 +1,44 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=content-binary url=http://target:8080/content/binary/content-binary timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=300a2f463b2bc418789b1d3ec0ba1f51 content_sha224=adde1f73c2301b4acfced42dc99e4eb6c07b5fc3063c672782beb67c content_size=256 has_expected_string=false",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "300a2f463b2bc418789b1d3ec0ba1f51",
+        "content_sha224": "adde1f73c2301b4acfced42dc99e4eb6c07b5fc3063c672782beb67c",
+        "content_size": "256",
+        "has_expected_string": "false",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "200",
+        "source": "web_ping://content-binary",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "content-binary",
+        "total_time": "<number>",
+        "url": "http://target:8080/content/binary/content-binary"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/content/binary/content-binary",
+      "port": 8080,
+      "status": 200,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "content-binary"
+}

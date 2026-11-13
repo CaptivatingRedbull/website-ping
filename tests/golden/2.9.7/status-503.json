@@ -1,0 +1,43 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=503 total_time=<number> request_time=<number> timed_out=False title=status-503 url=http://target:8080/status/503 timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=444bcb3a3fcf8389296c49467f27e1d6 content_sha224=05c2e2fa42d48e0ff1af0586e3033a9e31bc8930f90a1cc2e4029a2b content_size=2",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "444bcb3a3fcf8389296c49467f27e1d6",
+        "content_sha224": "05c2e2fa42d48e0ff1af0586e3033a9e31bc8930f90a1cc2e4029a2b",
+        "content_size": "2",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "503",
+        "source": "web_ping://status-503",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "status-503",
+        "total_time": "<number>",
+        "url": "http://target:8080/status/503"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/status/503",
+      "port": 8080,
+      "status": 503,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "status-503"
+}

@@ -1,0 +1,311 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=\"\" total_time=\"\" request_time=\"\" timed_out=False title=loop url=http://target:8080/loop/loop timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" exceeded_redirects=True",
+      "fields": {
+        "_time": "<time>",
+        "exceeded_redirects": "True",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "",
+        "response_code": "",
+        "source": "web_ping://loop",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "loop",
+        "total_time": "",
+        "url": "http://target:8080/loop/loop"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/loop/loop",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "loop"
+}

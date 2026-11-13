@@ -1,0 +1,30 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=\"\" total_time=\"\" request_time=\"\" timed_out=False title=mtls-none url=https://target:8447/mtls-none timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\"",
+      "fields": {
+        "_time": "<time>",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "",
+        "response_code": "",
+        "source": "web_ping://mtls-none",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "mtls-none",
+        "total_time": "",
+        "url": "https://target:8447/mtls-none"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [],
+  "title": "mtls-none"
+}

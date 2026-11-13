@@ -26,3 +26,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store_true",
         help="keep the first failing stack and stop the session",
     )
+    group.addoption(
+        "--golden-write",
+        action="store_true",
+        help="golden capture: write tests/golden/<version>/ instead of comparing",
+    )

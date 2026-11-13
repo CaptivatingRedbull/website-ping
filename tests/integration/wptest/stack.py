@@ -22,12 +22,14 @@ COMPOSE_FILES = {
     "noroute": COMPOSE_DIR / "no_route.yml",
     "distributed": COMPOSE_DIR / "distributed.yml",
     "spike": COMPOSE_DIR / "standalone.yml",
+    "golden": COMPOSE_DIR / "standalone.yml",
 }
 SPLUNK_SERVICES = {
     "standalone": ("so1",),
     "noroute": ("so1",),
     "distributed": ("ds", "idx", "sh", "hf"),
     "spike": ("so1",),
+    "golden": ("so1",),
 }
 HOST_PORTS = (8000, 8088, 8089, 9997)
 SPLUNK = "/opt/splunk/bin/splunk"

@@ -1,0 +1,30 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=\"\" total_time=\"\" request_time=\"\" timed_out=False title=refused url=http://target:8090/ timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\"",
+      "fields": {
+        "_time": "<time>",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "",
+        "response_code": "",
+        "source": "web_ping://refused",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "refused",
+        "total_time": "",
+        "url": "http://target:8090/"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [],
+  "title": "refused"
+}

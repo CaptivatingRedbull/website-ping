@@ -1,0 +1,61 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=digest-plain url=http://target:8080/auth/digest/digest-plain timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=700633a1b0f65fa8456a18bd6053193c content_sha224=1b504f616afbcb36d4e5a060663652217c8910b54c5865072b7c7561 content_size=13",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "700633a1b0f65fa8456a18bd6053193c",
+        "content_sha224": "1b504f616afbcb36d4e5a060663652217c8910b54c5865072b7c7561",
+        "content_size": "13",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "200",
+        "source": "web_ping://digest-plain",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "digest-plain",
+        "total_time": "<number>",
+        "url": "http://target:8080/auth/digest/digest-plain"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/digest/digest-plain",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/digest/digest-plain",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "Digest",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/digest/digest-plain",
+      "port": 8080,
+      "status": 200,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "digest-plain"
+}

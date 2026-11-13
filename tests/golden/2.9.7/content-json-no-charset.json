@@ -1,0 +1,44 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=content-json-no-charset url=http://target:8080/content/json-no-charset/content-json-no-charset timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=ab3cd195a75be44cd9b2575937a02467 content_sha224=57bef7aec09ced068c6327a3f509c265599cdddb4321dd63abb90d02 content_size=34 has_expected_string=true",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "ab3cd195a75be44cd9b2575937a02467",
+        "content_sha224": "57bef7aec09ced068c6327a3f509c265599cdddb4321dd63abb90d02",
+        "content_size": "34",
+        "has_expected_string": "true",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "200",
+        "source": "web_ping://content-json-no-charset",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "content-json-no-charset",
+        "total_time": "<number>",
+        "url": "http://target:8080/content/json-no-charset/content-json-no-charset"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/content/json-no-charset/content-json-no-charset",
+      "port": 8080,
+      "status": 200,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "content-json-no-charset"
+}

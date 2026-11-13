@@ -1,0 +1,55 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=body-big url=http://target:8080/big/5000/body-big timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=7408ca0788d91a8434b95ec0186f1b21 content_sha224=9fc688735c777cdf1d1b19ab55094946faabc1c6f3a99efc4b3b89a3 content_size=5000",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "7408ca0788d91a8434b95ec0186f1b21",
+        "content_sha224": "9fc688735c777cdf1d1b19ab55094946faabc1c6f3a99efc4b3b89a3",
+        "content_size": "5000",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "200",
+        "source": "web_ping://body-big",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "body-big",
+        "total_time": "<number>",
+        "url": "http://target:8080/big/5000/body-big"
+      }
+    },
+    {
+      "_raw": "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789",
+      "fields": {
+        "_time": "<time>",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "source": "web_ping://body-big",
+        "sourcetype": "web_ping:response",
+        "timestamp": "none"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/big/5000/body-big",
+      "port": 8080,
+      "status": 200,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "body-big"
+}

@@ -1,0 +1,69 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=\"\" total_time=\"\" request_time=\"\" timed_out=False title=over-3 url=http://target:8080/chain/over-3/4 timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" exceeded_redirects=True max_redirects=3",
+      "fields": {
+        "_time": "<time>",
+        "exceeded_redirects": "True",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "max_redirects": "3",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "",
+        "response_code": "",
+        "source": "web_ping://over-3",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "over-3",
+        "total_time": "",
+        "url": "http://target:8080/chain/over-3/4"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/chain/over-3/4",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/chain/over-3/3",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/chain/over-3/2",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/chain/over-3/1",
+      "port": 8080,
+      "status": 302,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "over-3"
+}

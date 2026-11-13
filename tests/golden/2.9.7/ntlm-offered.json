@@ -1,0 +1,1088 @@
+{
+  "complete": false,
+  "events": [],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/ntlm/ntlm-offered",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    }
+  ],
+  "title": "ntlm-offered"
+}

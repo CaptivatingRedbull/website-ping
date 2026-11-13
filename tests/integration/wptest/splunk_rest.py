@@ -93,11 +93,22 @@ class SplunkRest:
         text = self._call(f"{path}{separator}output_mode=json&count=0")
         return cast("dict[str, object]", json.loads(text))
 
+    def post(self, path: str, data: dict[str, str]) -> dict[str, object]:
+        """POST form data; the response as JSON."""
+        separator = "&" if "?" in path else "?"
+        text = self._call(f"{path}{separator}output_mode=json", data)
+        return cast("dict[str, object]", json.loads(text))
+
     def search(self, query: str) -> list[dict[str, str]]:
         """The query starts with "search", which the REST API needs."""
         self.last_result = self._call(
             "/services/search/jobs/export",
-            {"search": query, "output_mode": "json", "earliest_time": "0"},
+            {
+                "search": query,
+                "output_mode": "json",
+                "earliest_time": "0",
+                "preview": "false",
+            },
         )
         return parse_results(self.last_result)
 

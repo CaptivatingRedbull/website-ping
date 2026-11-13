@@ -1,0 +1,55 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=body-small url=http://target:8080/big/10/body-small timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=781e5e245d69b566979b86e28d23f2c7 content_sha224=f28ad8ecd48ba6f914c114821685ad08f0d6103649ff156599a90426 content_size=10",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "781e5e245d69b566979b86e28d23f2c7",
+        "content_sha224": "f28ad8ecd48ba6f914c114821685ad08f0d6103649ff156599a90426",
+        "content_size": "10",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "200",
+        "source": "web_ping://body-small",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "body-small",
+        "total_time": "<number>",
+        "url": "http://target:8080/big/10/body-small"
+      }
+    },
+    {
+      "_raw": "0123456789",
+      "fields": {
+        "_time": "<time>",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "source": "web_ping://body-small",
+        "sourcetype": "web_ping:response",
+        "timestamp": "none"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/big/10/body-small",
+      "port": 8080,
+      "status": 200,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "body-small"
+}

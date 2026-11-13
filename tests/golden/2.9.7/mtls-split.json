@@ -1,0 +1,43 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=mtls-split url=https://target:8447/mtls-split timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=444bcb3a3fcf8389296c49467f27e1d6 content_sha224=05c2e2fa42d48e0ff1af0586e3033a9e31bc8930f90a1cc2e4029a2b content_size=2",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "444bcb3a3fcf8389296c49467f27e1d6",
+        "content_sha224": "05c2e2fa42d48e0ff1af0586e3033a9e31bc8930f90a1cc2e4029a2b",
+        "content_size": "2",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "200",
+        "source": "web_ping://mtls-split",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "mtls-split",
+        "total_time": "<number>",
+        "url": "https://target:8447/mtls-split"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "wptest-client",
+      "method": "GET",
+      "path": "/mtls-split",
+      "port": 8447,
+      "status": 200,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "mtls-split"
+}

@@ -46,9 +46,12 @@ class FieldDiff:
     field: str
     expected: str
     actual: str
+    allowed: bool = False
+    """A known, intended difference: reported, but it does not fail a test."""
 
     def __str__(self) -> str:
-        return f"{self.field}: expected {self.expected}, got {self.actual}"
+        text = f"{self.field}: expected {self.expected}, got {self.actual}"
+        return text + " (allowed)" if self.allowed else text
 
 
 def _number(value: str | None) -> float | None:

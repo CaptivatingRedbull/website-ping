@@ -1,0 +1,52 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=401 total_time=<number> request_time=<number> timed_out=False title=auth-wrong url=http://target:8080/auth/basic/auth-wrong timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=36fd540552b3b1b34e8f0bd8897cbf1e content_sha224=74afb297542440fdd30e715b627c59cbb7bc074b03a5c0b87de93d71 content_size=12",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "36fd540552b3b1b34e8f0bd8897cbf1e",
+        "content_sha224": "74afb297542440fdd30e715b627c59cbb7bc074b03a5c0b87de93d71",
+        "content_size": "12",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "401",
+        "source": "web_ping://auth-wrong",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "auth-wrong",
+        "total_time": "<number>",
+        "url": "http://target:8080/auth/basic/auth-wrong"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "authorization": "",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/basic/auth-wrong",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "python-requests/2.15.1"
+    },
+    {
+      "authorization": "Basic",
+      "client_cn": "",
+      "method": "GET",
+      "path": "/auth/basic/auth-wrong",
+      "port": 8080,
+      "status": 401,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "auth-wrong"
+}

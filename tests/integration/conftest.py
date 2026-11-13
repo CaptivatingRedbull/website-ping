@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 import pytest
 from wptest import evidence as evidence_module
-from wptest import host_snapshot, install, preflight
+from wptest import host_snapshot, install, legacy, parity, preflight
 from wptest.certs import SPLUNK_CERT_DIR, Certificates, generate
 from wptest.evidence import Evidence
 from wptest.install import APPS_DIR, Package
@@ -42,9 +42,10 @@ TOPOLOGY_OF_MARKER = {
     "no_route": "noroute",
     "distributed": "distributed",
     "spike": "spike",
+    "golden": "golden",
 }
-TOPOLOGY_ORDER = ("standalone", "noroute", "spike", "distributed")
-OPT_IN_MARKERS = ("spike",)
+TOPOLOGY_ORDER = ("standalone", "noroute", "spike", "golden", "distributed")
+OPT_IN_MARKERS = ("spike", "golden")
 MANAGER_KEY = pytest.StashKey["StackManager"]()
 
 
@@ -109,6 +110,10 @@ def stanza_hosts() -> list[str]:
             host = urlparse(parser.get(section, "url", fallback="")).hostname
             if host:
                 hosts.append(host)
+    for scenario in parity.PARITY_SCENARIOS:
+        host = urlparse(scenario.url).hostname
+        if host:
+            hosts.append(host)
     return hosts
 
 
@@ -427,11 +432,61 @@ def setup_spike(stack: Stack, manager: StackManager) -> None:
     stack.stages.reached(INSTALL)
 
 
+def setup_golden(stack: Stack, manager: StackManager) -> None:
+    """Standalone compose file with Website Monitoring 2.9.7 instead of website-ping.
+
+    Passwords go into storage/passwords before the inputs exist and the config
+    files go into website_monitoring/local/, so the first check already sees
+    both. The old app reads its configuration at start (single instance), so
+    the restart after copying is the one that applies it.
+    """
+    source = legacy.download()
+    package = legacy.build_legacy_package(
+        source, manager.workdir / f"{legacy.LEGACY_APP}-{legacy.LEGACY_VERSION}.tar.gz"
+    )
+    _start(stack, manager)
+    _deliver_helpers(stack, manager, ("so1",))
+    _probe(stack, manager, ("so1",))
+    legacy.install_legacy(stack, "so1", package)
+    rest = stack.rest("so1")
+    app = wait_for(
+        "legacy app visible",
+        lambda: rest.app(legacy.LEGACY_APP) or None,
+        install.RESTART_TIMEOUT,
+        stack.stages,
+    )
+    manager.evidence.note(
+        f"{stack.project}.legacy",
+        {
+            "commit": legacy.LEGACY_COMMIT,
+            "source_sha256": legacy.sha256(source),
+            "package_sha256": legacy.sha256(package),
+            "version": app.get("version"),
+        },
+    )
+    for realm, username, password in parity.passwords():
+        rest.post(
+            f"/servicesNS/nobody/{legacy.LEGACY_APP}/storage/passwords",
+            {"name": username, "password": password, "realm": realm},
+        )
+    inputs = manager.workdir / "golden-inputs.conf"
+    inputs.write_text(parity.inputs_conf(), encoding="utf-8")
+    conf = manager.workdir / "golden-website_monitoring.conf"
+    conf.write_text(parity.website_monitoring_conf(), encoding="utf-8")
+    legacy.write_local(
+        stack, "so1", {"inputs.conf": inputs, "website_monitoring.conf": conf}
+    )
+    install.stop_mark_start(stack, "so1", mark_from_target=True)
+    stack.stages.reached(INSTALL)
+    install.wait_registered(stack, "so1", "status-200", stack.stages)
+
+
 SETUPS: dict[str, Callable[[Stack, StackManager], None]] = {
     "standalone": setup_standalone,
     "noroute": setup_noroute,
     "distributed": setup_distributed,
     "spike": setup_spike,
+    "golden": setup_golden,
 }
 
 
@@ -549,6 +604,15 @@ def distributed_stack(stacks: StackManager, splunk_line: str) -> Stack:
 @pytest.fixture
 def spike_stack(stacks: StackManager, splunk_line: str) -> Stack:
     return stacks.get(splunk_line, "spike")
+
+
+@pytest.fixture
+def golden_stack(stacks: StackManager, splunk_line: str) -> Stack:
+    if splunk_line != legacy.LEGACY_LINE:
+        pytest.skip(
+            f"Website Monitoring 2.9.7 is captured on {legacy.LEGACY_LINE} only"
+        )
+    return stacks.get(splunk_line, "golden")
 
 
 @pytest.fixture
