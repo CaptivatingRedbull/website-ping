@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from logger import log, read_app_version, setup_logging
+from logger import log, setup_logging
+from wp_version import read_app_version
 
 
 def test_reads_version(tmp_path: Path) -> None:

@@ -17,6 +17,7 @@ EXPECTED_FILES = {
     "bin/ping_config.py",
     "bin/ping_events.py",
     "bin/web_ping.py",
+    "bin/wp_version.py",
     "default/app.conf",
     "default/data/ui/nav/default.xml",
     "default/data/ui/views/README",

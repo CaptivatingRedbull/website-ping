@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import configparser
 import logging
 import sys
-from pathlib import Path
 
 from compat import override
+from wp_version import APP_VERSION
 
 logging.addLevelName(logging.WARNING, "WARN")
 
@@ -16,24 +15,7 @@ LOG_LEVELS: dict[str, int] = {
     "ERROR": logging.ERROR,
 }
 
-APP_CONF = Path(__file__).absolute().parent.parent / "default" / "app.conf"
-
 log: logging.Logger = logging.getLogger("web_ping")
-
-
-def read_app_version(path: str | Path = APP_CONF) -> str:
-    """Return [launcher] version from app.conf, or 'unknown'. Never raises."""
-    parser = configparser.ConfigParser(
-        interpolation=None, strict=False, delimiters=("=",)
-    )
-    try:
-        _ = parser.read(path, encoding="utf-8")
-        return parser.get("launcher", "version").strip() or "unknown"
-    except (configparser.Error, OSError, ValueError):
-        return "unknown"
-
-
-APP_VERSION = read_app_version()
 
 
 class OneLineFormatter(logging.Formatter):

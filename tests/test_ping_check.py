@@ -54,7 +54,10 @@ def base_url() -> Iterator[str]:
 
 
 def make(url: str, **extra: str) -> Settings:
-    return build_settings({"url": url, **extra})
+    settings, _ = build_settings(
+        "web_ping://test", {"url": url, "interval": "60", **extra}
+    )
+    return settings
 
 
 def test_ok(base_url: str) -> None:

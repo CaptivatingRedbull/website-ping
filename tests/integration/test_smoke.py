@@ -39,13 +39,11 @@ def test_btool_shows_app_defaults(standalone: Stack) -> None:
         for line in output.splitlines()
         if line.startswith(APP_INPUTS)
     }
-    for setting in (
-        "sourcetype = website-ping",
-        "interval = 300",
-        "timeout = 30",
-        "max_redirects = 10",
-    ):
+    for setting in ("sourcetype = website-ping", "interval = 300"):
         assert setting in from_app, f"{setting!r} not set by the app:\n{output}"
+    # Code defaults apply; a default here would replace the unlimited redirects.
+    for key in ("timeout", "max_redirects", "user_agent"):
+        assert not any(line.startswith(f"{key} ") for line in from_app), output
 
 
 def test_interpreter(standalone: Stack, splunk_line: str, evidence: Evidence) -> None:

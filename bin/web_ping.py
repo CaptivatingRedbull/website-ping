@@ -3,30 +3,66 @@ from __future__ import annotations
 import sys
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
+from xml.sax.saxutils import escape
 
 from logger import log, setup_logging
 from ping_check import check_url, event_fields
 from ping_config import ConfigError, build_settings
 from ping_events import write_event
 
-SCHEME = """<scheme>
-  <title>Web Ping</title>
-  <description>Checks a URL and records response code and timing.</description>
-  <use_external_validation>false</use_external_validation>
-  <use_single_instance>false</use_single_instance>
-  <streaming_mode>xml</streaming_mode>
-  <endpoint>
-    <args>
-      <arg name="url"><title>URL</title><description>URL to check</description><required_on_create>true</required_on_create></arg>
-      <arg name="title"><title>Title</title><required_on_create>false</required_on_create></arg>
-      <arg name="timeout"><title>Timeout</title><required_on_create>false</required_on_create></arg>
-      <arg name="user_agent"><title>User agent</title><required_on_create>false</required_on_create></arg>
-      <arg name="max_redirects"><title>Max redirects</title><required_on_create>false</required_on_create></arg>
-      <arg name="log_level"><title>Log level</title><required_on_create>false</required_on_create></arg>
-    </args>
-  </endpoint>
-</scheme>
-"""
+SCHEME_ARGS: tuple[tuple[str, str, str], ...] = (
+    ("url", "URL", "The URL to check (http or https)"),
+    ("title", "Title", "A short description of the site; defaults to the URL"),
+    ("configuration", "Configuration",
+     "Stanza of website_monitoring.conf to use; defaults to default"),
+    ("client_certificate", "Client certificate", "Path to a client certificate"),
+    ("client_certificate_key", "Client certificate key",
+     "Path to the client certificate key, if it is not in the certificate file"),
+    ("username", "Username", "User name for HTTP authentication"),
+    ("password", "Password",
+     "Not supported, rejected; store the password in storage/passwords"),
+    ("user_agent", "User agent", "User-Agent header to send"),
+    ("should_contain_string", "String match", "Text expected in the response body"),
+    ("max_redirects", "Maximum redirects",
+     "Redirects to follow; -1 or blank for unlimited, 0 to follow none"),
+    ("timeout", "Timeout", "Seconds to wait for a response; defaults to 30"),
+    ("return_body", "Return response body", "true or 1 to index the response body"),
+    ("return_headers", "Return headers", "true or 1 to add the response headers"),
+    ("warning_threshold", "Warning threshold",
+     "Response time in ms above which the check counts as a warning"),
+    ("error_threshold", "Error threshold",
+     "Response time in ms above which the check counts as failed"),
+    ("ssl_verify", "Verify certificates",
+     "true or 1 to verify the server certificate"),
+    ("ca_certs", "CA certificates", "Path to a CA bundle for certificate checks"),
+    ("log_level", "Log level", "DEBUG, INFO, WARN or ERROR; defaults to INFO"),
+)  # fmt: skip
+"""Arguments declared in the scheme. interval is not declared: splunkd refuses to
+start a multi-instance input whose scheme declares it."""
+
+
+def scheme_xml() -> str:
+    args = "\n".join(
+        f'      <arg name="{name}"><title>{escape(title)}</title>'
+        f"<description>{escape(description)}</description>"
+        f"<required_on_create>{'true' if name == 'url' else 'false'}</required_on_create>"
+        "<required_on_edit>false</required_on_edit></arg>"
+        for name, title, description in SCHEME_ARGS
+    )
+    return (
+        "<scheme>\n"
+        "  <title>Web Ping</title>\n"
+        "  <description>Checks a URL and records response code and timing.</description>\n"
+        "  <use_external_validation>false</use_external_validation>\n"
+        "  <use_single_instance>false</use_single_instance>\n"
+        "  <streaming_mode>xml</streaming_mode>\n"
+        "  <endpoint>\n"
+        "    <args>\n"
+        f"{args}\n"
+        "    </args>\n"
+        "  </endpoint>\n"
+        "</scheme>\n"
+    )
 
 
 def read_config(xml_text: str) -> tuple[str, dict[str, str]]:
@@ -46,9 +82,13 @@ def read_config(xml_text: str) -> tuple[str, dict[str, str]]:
 
 def ping() -> None:
     name, params = read_config(sys.stdin.read())
-    if not setup_logging(params.get("log_level", "INFO"), name):
-        log.warning("invalid log_level %r, using INFO", params.get("log_level"))
-    settings = build_settings(params)
+    _ = setup_logging("INFO", name)
+    # splunkd still schedules each stanza itself, so interval may be absent or in a
+    # form only splunkd parses.
+    settings, warnings = build_settings(name, params, require_interval=False)
+    _ = setup_logging(settings["log_level"], name)
+    for warning in warnings:
+        log.warning("%s", warning)
     log.debug("effective settings: %s", settings)
     log.info("starting check url=%s", settings["url"])
     result = check_url(settings)
@@ -67,7 +107,7 @@ def main(argv: Sequence[str]) -> int:
     _ = setup_logging()
     if len(argv) > 1:
         if argv[1] == "--scheme":
-            _ = sys.stdout.write(SCHEME)
+            _ = sys.stdout.write(scheme_xml())
             return 0
         if argv[1] == "--validate-arguments":
             return 0

@@ -10,7 +10,7 @@ from typing import IO, cast
 
 from compat import override
 from logger import log
-from ping_config import Settings
+from ping_config import UNLIMITED_REDIRECTS, Settings
 from ping_events import FieldValue
 
 CHUNK_SIZE = 64 * 1024
@@ -84,7 +84,10 @@ def _describe(exc: BaseException) -> str:
 
 
 def check_url(settings: Settings) -> CheckResult:
-    redirects = LimitedRedirectHandler(settings["max_redirects"])
+    max_redirects = settings["max_redirects"]
+    if max_redirects is None:
+        max_redirects = UNLIMITED_REDIRECTS
+    redirects = LimitedRedirectHandler(max_redirects)
     # ProxyHandler({}) ignores proxy environment variables (will be implemented later)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), redirects)
     request = urllib.request.Request(
@@ -114,9 +117,7 @@ def check_url(settings: Settings) -> CheckResult:
     if not complete:
         return result(code, timed_out=True)
     if redirects.limit_reached and 300 <= code <= 400:
-        return result(
-            code, error=f"redirect limit of {settings['max_redirects']} reached"
-        )
+        return result(code, error=f"redirect limit of {max_redirects} reached")
     return result(code)
 
 
