@@ -1,5 +1,5 @@
 {
-  "captured": "2026-11-12",
+  "captured": "2026-11-13",
   "digest": "sha256:8d3849f78c2814fd65e68a69aeaa4d1dc79f37e661dbe48e791f4552b025def5",
   "image": "splunk/splunk:9.4.17",
   "incomplete": [
@@ -8,12 +8,12 @@
   "input_environment": {
     "HTTPS_PROXY": "http://squid:3128",
     "HTTP_PROXY": "http://squid:3128",
-    "NO_PROXY": "localhost,127.0.0.1,target,.invalid,192.0.2.10",
+    "NO_PROXY": "localhost,127.0.0.1,target,.invalid,.test,192.0.2.10",
     "SSL_CERT_FILE": "/tmp/wptest-ca.pem",
     "exe": "/opt/splunk/bin/python3.9",
     "http_proxy": "http://squid:3128",
     "https_proxy": "http://squid:3128",
-    "no_proxy": "localhost,127.0.0.1,target,.invalid,192.0.2.10"
+    "no_proxy": "localhost,127.0.0.1,target,.invalid,.test,192.0.2.10"
   },
   "legacy_commit": "442d08de5bbfed4a879de3b537eae0361de8e473",
   "legacy_source_sha256": "4ec8ef6d4c6549d7cf8d8052ccc69b9749dfd6b2cb4a61c1a297a7f4725e2e55",

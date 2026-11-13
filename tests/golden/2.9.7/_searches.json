@@ -1,0 +1,577 @@
+{
+  "searches": [
+    {
+      "app": "website_monitoring",
+      "name": "empty-fields",
+      "query": "search index=main sourcetype=web_ping _index_earliest={since} title=refused | eval response_code_is=if(isnull(response_code),\"null\",\"set\"), total_time_is=if(isnull(total_time),\"null\",\"set\"), proxy_port_is=if(isnull(proxy_port),\"null\",\"set\") | stats count by response_code_is total_time_is proxy_port_is",
+      "question": "Are the empty values of a failed check (response_code=\"\") null at search time?",
+      "rows": [
+        {
+          "count": "<volatile>",
+          "proxy_port_is": "set",
+          "response_code_is": "set",
+          "total_time_is": "set"
+        }
+      ]
+    },
+    {
+      "app": "website_monitoring",
+      "name": "match-empty-response-code",
+      "query": "search index=main sourcetype=web_ping _index_earliest={since} (title=status-200 OR title=status-503 OR title=refused OR title=timeout OR title=match-no) response_code=\"\" | stats count by title",
+      "question": "Which titles does response_code=\"\" match?",
+      "rows": [
+        {
+          "count": "<volatile>",
+          "title": "refused"
+        },
+        {
+          "count": "<volatile>",
+          "title": "timeout"
+        }
+      ]
+    },
+    {
+      "app": "website_monitoring",
+      "name": "match-no-response-code",
+      "query": "search index=main sourcetype=web_ping _index_earliest={since} (title=status-200 OR title=status-503 OR title=refused OR title=timeout OR title=match-no) NOT response_code=\"*\" | stats count by title",
+      "question": "Which titles does NOT response_code=\"*\" match?",
+      "rows": []
+    },
+    {
+      "app": "website_monitoring",
+      "name": "match-tag-not-equal",
+      "query": "search index=main sourcetype=web_ping _index_earliest={since} (title=status-200 OR title=status-503 OR title=refused OR title=timeout OR title=match-no) tag!=\"exclude_from_alerts\" | stats count by title",
+      "question": "Which titles does tag!=\"exclude_from_alerts\" keep (no event has a tag)?",
+      "rows": [
+        {
+          "count": "<volatile>",
+          "title": "match-no"
+        },
+        {
+          "count": "<volatile>",
+          "title": "refused"
+        },
+        {
+          "count": "<volatile>",
+          "title": "status-200"
+        },
+        {
+          "count": "<volatile>",
+          "title": "status-503"
+        },
+        {
+          "count": "<volatile>",
+          "title": "timeout"
+        }
+      ]
+    },
+    {
+      "app": "website_monitoring",
+      "name": "match-not-tag",
+      "query": "search index=main sourcetype=web_ping _index_earliest={since} (title=status-200 OR title=status-503 OR title=refused OR title=timeout OR title=match-no) NOT tag=\"exclude_from_alerts\" | stats count by title",
+      "question": "Which titles does NOT tag=\"exclude_from_alerts\" keep?",
+      "rows": [
+        {
+          "count": "<volatile>",
+          "title": "match-no"
+        },
+        {
+          "count": "<volatile>",
+          "title": "refused"
+        },
+        {
+          "count": "<volatile>",
+          "title": "status-200"
+        },
+        {
+          "count": "<volatile>",
+          "title": "status-503"
+        },
+        {
+          "count": "<volatile>",
+          "title": "timeout"
+        }
+      ]
+    },
+    {
+      "app": "website_monitoring",
+      "name": "alert",
+      "query": "| savedsearch \"Website Performance Problem\"",
+      "question": "Rows of the shipped alert Website Performance Problem.",
+      "rows": [
+        {
+          "count": "<volatile>",
+          "description": "503 (Service Unavailable)",
+          "max_total_time": "<volatile>",
+          "response_code": "503",
+          "title": "status-503",
+          "url": "http://target:8080/status/503"
+        },
+        {
+          "count": "<volatile>",
+          "description": "Connection failed",
+          "response_code": "",
+          "title": "refused",
+          "url": "http://target:8090/"
+        },
+        {
+          "count": "<volatile>",
+          "description": "Connection failed",
+          "response_code": "",
+          "title": "timeout",
+          "url": "http://target:8081/"
+        },
+        {
+          "count": "<volatile>",
+          "description": "Content doesn't match",
+          "max_total_time": "<volatile>",
+          "response_code": "200",
+          "title": "match-no",
+          "url": "http://target:8080/done/match-no"
+        }
+      ]
+    },
+    {
+      "app": "website_monitoring",
+      "name": "inoperable-rangemap",
+      "query": "| savedsearch inoperable_sites_rangemap",
+      "question": "Result of the shipped search inoperable_sites_rangemap.",
+      "rows": [
+        {
+          "count": "5",
+          "range": "severe"
+        }
+      ]
+    },
+    {
+      "app": "website_monitoring",
+      "name": "inoperable-by-site",
+      "query": "search sourcetype=\"web_ping\" `website_monitoring_search_index` _index_earliest={since} | stats latest(title) as title latest(response_code) as response_code latest(timed_out) as timed_out distinct_count(url) as count by url | eval down=if(response_code>=400,1,if(timed_out==\"True\", 1, 0)) | table title response_code timed_out down",
+      "question": "Which sites inoperable_sites_rangemap counts as down (its search up to the eval of down, per site).",
+      "rows": [
+        {
+          "down": "0",
+          "response_code": "",
+          "timed_out": "False",
+          "title": "blank-31"
+        },
+        {
+          "down": "0",
+          "response_code": "",
+          "timed_out": "False",
+          "title": "dns-failure"
+        },
+        {
+          "down": "0",
+          "response_code": "",
+          "timed_out": "False",
+          "title": "loop"
+        },
+        {
+          "down": "0",
+          "response_code": "",
+          "timed_out": "False",
+          "title": "mtls-none"
+        },
+        {
+          "down": "0",
+          "response_code": "",
+          "timed_out": "False",
+          "title": "over-3"
+        },
+        {
+          "down": "0",
+          "response_code": "",
+          "timed_out": "False",
+          "title": "redirects-off"
+        },
+        {
+          "down": "0",
+          "response_code": "",
+          "timed_out": "False",
+          "title": "refused"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "2020-01-02T03:04:05 check"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "He said \\"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "basic-plain"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "basic-secure"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "blank-25"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "body-big"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "body-binary"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "body-lines"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "body-small"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "chain-at-3"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "content-binary"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "content-json-no-charset"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "content-latin1-charset"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "content-text-no-charset"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "content-utf8-charset"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "cookie-redirect"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "date-in-url"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "deflate"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "deflate-raw"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "digest-plain"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "gzip"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "gzip-forced"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "headers"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "host-set"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "idn-eszett"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "idn-host"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "interval-units"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "match-no"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "match-yes"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "minus-one-25"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "mtls-combined"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "mtls-split"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "path-space"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "path-unicode"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "proxy-auth"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "proxy-https"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "proxy-ignore"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "proxy-plain"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "redirect-301"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "redirect-302"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "redirect-303"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "redirect-307"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "redirect-308"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "request-headers"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "status-200"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "thresholds"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "tls-expired"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "tls-self-signed"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "tls-valid"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "tls-wrong-host"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "trickled-body"
+        },
+        {
+          "down": "0",
+          "response_code": "200",
+          "timed_out": "False",
+          "title": "user-agent"
+        },
+        {
+          "down": "1",
+          "response_code": "",
+          "timed_out": "True",
+          "title": "slow-body"
+        },
+        {
+          "down": "1",
+          "response_code": "",
+          "timed_out": "True",
+          "title": "timeout"
+        },
+        {
+          "down": "1",
+          "response_code": "401",
+          "timed_out": "False",
+          "title": "auth-wrong"
+        },
+        {
+          "down": "1",
+          "response_code": "404",
+          "timed_out": "False",
+          "title": "status-404"
+        },
+        {
+          "down": "1",
+          "response_code": "503",
+          "timed_out": "False",
+          "title": "status-503"
+        }
+      ]
+    },
+    {
+      "app": "website_monitoring",
+      "name": "event-times",
+      "query": "search index=main (sourcetype=web_ping OR sourcetype=\"web_ping:response\") (source=\"web_ping://date-in-url\" OR source=\"web_ping://date-in-title\" OR source=\"web_ping://body-lines\") _index_earliest={since} | eval wptest_time=_time, wptest_indextime=_indextime, wptest_raw=_raw | table source sourcetype wptest_time wptest_indextime linecount timestamp wptest_raw",
+      "question": "For events whose text holds a date or several lines: _time against arrival, linecount, the timestamp field and the number of events of one check.",
+      "rows": [
+        {
+          "_raw": "WPTEST-MARKER first line\nsecond line\n2021-03-04T05:06:07Z third line starts with a date\nfourth line\nfifth line",
+          "_time": "<arrival day>T05:06:07Z",
+          "linecount": "5",
+          "source": "web_ping://body-lines",
+          "sourcetype": "web_ping:response"
+        },
+        {
+          "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=body-lines url=http://target:8080/body-lines/body-lines timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=d5738057f4c62628372e5d256058a72a content_sha224=a4845c289029390766e5a3a2e74b9884e0efde187867785b18ff8ee8 content_size=111",
+          "_time": "<time>",
+          "linecount": "1",
+          "source": "web_ping://body-lines",
+          "sourcetype": "web_ping",
+          "timestamp": "none"
+        },
+        {
+          "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=\"2020-01-02T03:04:05 check\" url=http://target:8080/done/date-in-title timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=444bcb3a3fcf8389296c49467f27e1d6 content_sha224=05c2e2fa42d48e0ff1af0586e3033a9e31bc8930f90a1cc2e4029a2b content_size=2",
+          "_time": "<arrival day>T03:04:05Z",
+          "linecount": "1",
+          "source": "web_ping://date-in-title",
+          "sourcetype": "web_ping"
+        },
+        {
+          "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=date-in-url url=http://target:8080/done/d?d=2020-01-02T03:04:05 timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=444bcb3a3fcf8389296c49467f27e1d6 content_sha224=05c2e2fa42d48e0ff1af0586e3033a9e31bc8930f90a1cc2e4029a2b content_size=2",
+          "_time": "<time>",
+          "linecount": "1",
+          "source": "web_ping://date-in-url",
+          "sourcetype": "web_ping",
+          "timestamp": "none"
+        }
+      ]
+    }
+  ]
+}

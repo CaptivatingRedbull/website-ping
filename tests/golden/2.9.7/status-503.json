@@ -30,11 +30,25 @@
   "proxy_requests": [],
   "requests": [
     {
+      "accept": "*/*",
+      "accept_encoding": "gzip, deflate",
       "authorization": "",
       "client_cn": "",
+      "connection": "keep-alive",
+      "cookie": "",
+      "header_names": [
+        "Host",
+        "User-Agent",
+        "Accept-Encoding",
+        "Accept",
+        "Connection"
+      ],
+      "host": "target:8080",
       "method": "GET",
       "path": "/status/503",
       "port": 8080,
+      "rejected": false,
+      "request_line": "",
       "status": 503,
       "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
     }

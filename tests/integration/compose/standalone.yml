@@ -21,8 +21,8 @@ services:
       HTTPS_PROXY: http://squid:3128
       http_proxy: http://squid:3128
       https_proxy: http://squid:3128
-      NO_PROXY: localhost,127.0.0.1,target,.invalid,192.0.2.10
-      no_proxy: localhost,127.0.0.1,target,.invalid,192.0.2.10
+      NO_PROXY: localhost,127.0.0.1,target,.invalid,.test,192.0.2.10
+      no_proxy: localhost,127.0.0.1,target,.invalid,.test,192.0.2.10
     labels: *labels
     mem_limit: 2g
     memswap_limit: 2g
@@ -43,9 +43,16 @@ services:
     cpus: 0.5
     networks:
       default:
-        # Not in NO_PROXY: with environment proxies honoured, requests to
-        # http://env-proxied:8080/ go through Squid (commit 11, proxy-env).
-        aliases: [env-proxied]
+        # env-proxied is not in NO_PROXY: with environment proxies honoured,
+        # requests to http://env-proxied:8080/ go through Squid.
+        # The .test names are the punycode forms of the international host
+        # names in the parity table; strasse.test and xn--strae-oqa.test are
+        # the IDNA 2003 and IDNA 2008 forms of straße.test.
+        aliases:
+          - env-proxied
+          - xn--mnchen-3ya.test
+          - strasse.test
+          - xn--strae-oqa.test
 
   squid:
     build:

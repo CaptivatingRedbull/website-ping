@@ -10,8 +10,11 @@ LABEL = "website-ping.test"
 MIN_FREE_DISK = 200 * 1024**3
 DATA_ROOT = "/data/docker"
 ALLOWED_STANZA_HOSTS = frozenset(
-    {"target", "env-proxied", "wptest.invalid", "192.0.2.10"}
-)
+    {"target", "env-proxied", "wptest.invalid", "192.0.2.10", "münchen.test",
+     "straße.test"}
+)  # fmt: skip
+"""The international names resolve only through the target's network aliases
+(their punycode forms in the compose files); .test is a reserved top-level domain."""
 FORBIDDEN_TEXT = "host.docker.internal"
 
 TOP_KEYS = frozenset({"name", "services", "networks", "volumes"})

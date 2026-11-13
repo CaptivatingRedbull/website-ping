@@ -1,0 +1,58 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=deflate-raw url=http://target:8080/deflate-raw/deflate-raw timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=483c933ff78b0e44f9a1ee2b15b7ace7 content_sha224=eac018ae8c728518099dee54c766483d3b1b4d768b9446b89527d11b content_size=53 has_expected_string=true",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "483c933ff78b0e44f9a1ee2b15b7ace7",
+        "content_sha224": "eac018ae8c728518099dee54c766483d3b1b4d768b9446b89527d11b",
+        "content_size": "53",
+        "has_expected_string": "true",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "200",
+        "source": "web_ping://deflate-raw",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "deflate-raw",
+        "total_time": "<number>",
+        "url": "http://target:8080/deflate-raw/deflate-raw"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "accept": "*/*",
+      "accept_encoding": "gzip, deflate",
+      "authorization": "",
+      "client_cn": "",
+      "connection": "keep-alive",
+      "cookie": "",
+      "header_names": [
+        "Host",
+        "User-Agent",
+        "Accept-Encoding",
+        "Accept",
+        "Connection"
+      ],
+      "host": "target:8080",
+      "method": "GET",
+      "path": "/deflate-raw/deflate-raw",
+      "port": 8080,
+      "rejected": false,
+      "request_line": "",
+      "status": 200,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "deflate-raw"
+}

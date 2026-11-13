@@ -95,6 +95,13 @@ def test_one_content_scenario_per_target_case() -> None:
         ("tls-valid", 8443, "/tls-valid", True),
         ("tls-valid", 8443, "/proxy-https", False),
         ("refused", 8090, "/", True),
+        ("date-in-url", 8080, "/done/d?d=2020-01-02T03:04:05", True),
+        ("date-in-url", 8080, "/status/200", False),
+        ("status-200", 8080, "/done/d?d=2020-01-02T03:04:05", False),
+        ("idn-host", 8080, "/done/idn-host", True),
+        ("path-unicode", 8080, "/path/path-unicode/M%C3%BCller?q=M%C3%BCnchen", True),
+        ("path-space", 8080, "/path/path-space/a b", True),
+        ("cookie-redirect", 8080, "/cookie/cookie-redirect", True),
     ],
 )
 def test_matches_request(title: str, port: int, path: str, expected: bool) -> None:
@@ -107,3 +114,34 @@ def test_matches_proxy() -> None:
     assert not table["proxy-plain"].matches_proxy("http://target:8080/done/proxy-auth")
     assert table["proxy-https"].matches_proxy("target:8443")
     assert not table["tls-valid"].matches_proxy("target:8443")
+
+
+def test_request_scenarios_reach_their_target_routes() -> None:
+    routes = {
+        title: urlsplit(s.url).path.strip("/").split("/")[0]
+        for title, s in parity.by_title().items()
+    }
+    for route in ("gzip", "gzip-forced", "deflate", "deflate-raw"):
+        assert routes[route] == route
+        assert (
+            parity.by_title()[route].settings["should_contain_string"]
+            == "WPTEST-MARKER"
+        )
+    assert routes["cookie-redirect"] == "cookie"
+    assert routes["body-lines"] == "body-lines"
+    assert routes["body-binary"] == "body-binary"
+    assert parity.by_title()["body-lines"].settings["return_body"] == "1"
+
+
+def test_international_urls_survive_the_conf_file() -> None:
+    parser = parse(parity.inputs_conf())
+    assert (
+        parser["web_ping://idn-eszett"]["url"]
+        == "http://straße.test:8080/done/idn-eszett"
+    )
+    assert (
+        parser["web_ping://path-space"]["url"]
+        == "http://target:8080/path/path-space/a b"
+    )
+    assert parser["web_ping://host-set"]["host"] == "wptest-host"
+    assert parser["web_ping://date-in-title"]["title"] == "2020-01-02T03:04:05 check"

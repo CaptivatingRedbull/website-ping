@@ -30,29 +30,72 @@
   "proxy_requests": [],
   "requests": [
     {
+      "accept": "*/*",
+      "accept_encoding": "gzip, deflate",
       "authorization": "",
       "client_cn": "",
+      "connection": "keep-alive",
+      "cookie": "",
+      "header_names": [
+        "Host",
+        "User-Agent",
+        "Accept-Encoding",
+        "Accept",
+        "Connection"
+      ],
+      "host": "target:8080",
       "method": "GET",
       "path": "/auth/digest/digest-plain",
       "port": 8080,
+      "rejected": false,
+      "request_line": "",
       "status": 401,
       "user_agent": "python-requests/2.15.1"
     },
     {
+      "accept": "*/*",
+      "accept_encoding": "gzip, deflate",
       "authorization": "",
       "client_cn": "",
+      "connection": "keep-alive",
+      "cookie": "",
+      "header_names": [
+        "Host",
+        "User-Agent",
+        "Accept-Encoding",
+        "Accept",
+        "Connection"
+      ],
+      "host": "target:8080",
       "method": "GET",
       "path": "/auth/digest/digest-plain",
       "port": 8080,
+      "rejected": false,
+      "request_line": "",
       "status": 401,
       "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
     },
     {
+      "accept": "*/*",
+      "accept_encoding": "gzip, deflate",
       "authorization": "Digest",
       "client_cn": "",
+      "connection": "keep-alive",
+      "cookie": "",
+      "header_names": [
+        "Host",
+        "User-Agent",
+        "Accept-Encoding",
+        "Accept",
+        "Connection",
+        "Authorization"
+      ],
+      "host": "target:8080",
       "method": "GET",
       "path": "/auth/digest/digest-plain",
       "port": 8080,
+      "rejected": false,
+      "request_line": "",
       "status": 200,
       "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
     }

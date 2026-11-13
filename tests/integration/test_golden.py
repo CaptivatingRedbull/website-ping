@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from wptest import golden, legacy, parity
+from wptest import golden, legacy, parity, searches
 from wptest.evidence import Evidence
 from wptest.install import ROOT
 from wptest.splunk_rest import Searcher
@@ -32,13 +32,21 @@ COUNT_QUERY = (
     " _index_earliest={since} | stats count by source"
 )
 LEGACY_LOG = "/opt/splunk/var/log/splunk/web_availability_modular_input.log"
+INPUT_ERRORS = (
+    "grep -E 'ExecProcessor|XmlParser|ModularInputs' "
+    "/opt/splunk/var/log/splunk/splunkd.log 2>&1 || true\n"
+)
+"""splunkd's lines about the input process and its XML stream."""
 README = """\
 # Golden events: Website Monitoring {version}
 
-Captured by `tests/integration/test_golden.py` (commit 04). One JSON file per
+Captured by `tests/integration/test_golden.py`. One JSON file per
 scenario of `tests/integration/wptest/parity.py`: the normalised events
 (`wptest/golden.py`), the target's request log lines and Squid's log lines for
 the first `min_events` checks. `{meta}` has the details of the capture.
+`{searches}` holds the results of searches run in the old app's namespace
+(`wptest/searches.py`): empty values at search time, the shipped alert and
+range-map searches, and the timing of events with dates or several lines.
 
 * Website Monitoring {version}, commit `{commit}`, built from the GitHub tag
   (`wptest/legacy.py`), installed in `website_monitoring` with the config in
@@ -123,16 +131,39 @@ def capture(stack: Stack, evidence: Evidence) -> dict[str, golden.Capture]:
         stack.exec("so1", f"cat {LEGACY_LOG} 2>&1 || true\n"),
         stack.password,
     )
+    save(
+        stack.project,
+        "splunkd-input.log",
+        stack.exec("so1", INPUT_ERRORS),
+        stack.password,
+    )
     return {
         s.title: golden.select_capture(
             s,
-            sorted(rows.get(s.title, []), key=golden.event_time),
+            sorted(rows.get(s.title, []), key=golden.arrival_order),
             target_log,
             proxied,
             stack.mark,
         )
         for s in parity.PARITY_SCENARIOS
     }
+
+
+def record_searches(stack: Stack, evidence: Evidence) -> list[dict[str, object]]:
+    """Run each recorded search in the old app's namespace while the inputs still run."""
+    rest = stack.rest("so1")
+    recorded: list[dict[str, object]] = []
+    for search in searches.SEARCHES:
+        text = rest.export_in_app(
+            legacy.LEGACY_APP, search.query.format(since=int(stack.mark))
+        )
+        evidence.save(
+            stack.project, f"search-{search.name}.jsonl", text, stack.password
+        )
+        recorded.append(
+            searches.record(search, golden.parse_export(text), legacy.LEGACY_APP)
+        )
+    return recorded
 
 
 def write_fixtures(
@@ -161,6 +192,7 @@ def write_fixtures(
             version=legacy.LEGACY_VERSION,
             commit=legacy.LEGACY_COMMIT,
             meta=META,
+            searches=searches.FILE_NAME,
             image=line.image,
             digest=line.digest,
             date=date,
@@ -177,11 +209,16 @@ def test_golden_capture(
     golden_stack: Stack, request: pytest.FixtureRequest, evidence: Evidence
 ) -> None:
     captures = capture(golden_stack, evidence)
+    recorded = record_searches(golden_stack, evidence)
     if request.config.getoption("--golden-write"):
         for title in write_fixtures(golden_stack, captures, GOLDEN_DIR):
             warnings.warn(f"golden capture incomplete for {title}", stacklevel=1)
+        searches.write(GOLDEN_DIR, recorded)
         return
-    problems: list[str] = []
+    problems = [
+        f"{searches.FILE_NAME}: {line}"
+        for line in searches.differences(searches.read(GOLDEN_DIR), recorded)
+    ]
     for title, fresh in captures.items():
         diffs = golden.compare_capture(golden.read_capture(GOLDEN_DIR, title), fresh)
         evidence.note(f"{golden_stack.project}.golden.{title}", [str(d) for d in diffs])

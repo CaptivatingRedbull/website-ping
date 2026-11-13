@@ -1,0 +1,68 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "WPTEST-MARKER first line\nsecond line\n2021-03-04T05:06:07Z third line starts with a date\nfourth line\nfifth line",
+      "fields": {
+        "_time": "<arrival day>T05:06:07Z",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "5",
+        "source": "web_ping://body-lines",
+        "sourcetype": "web_ping:response"
+      }
+    },
+    {
+      "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=body-lines url=http://target:8080/body-lines/body-lines timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=d5738057f4c62628372e5d256058a72a content_sha224=a4845c289029390766e5a3a2e74b9884e0efde187867785b18ff8ee8 content_size=111",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "d5738057f4c62628372e5d256058a72a",
+        "content_sha224": "a4845c289029390766e5a3a2e74b9884e0efde187867785b18ff8ee8",
+        "content_size": "111",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "200",
+        "source": "web_ping://body-lines",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "body-lines",
+        "total_time": "<number>",
+        "url": "http://target:8080/body-lines/body-lines"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "accept": "*/*",
+      "accept_encoding": "gzip, deflate",
+      "authorization": "",
+      "client_cn": "",
+      "connection": "keep-alive",
+      "cookie": "",
+      "header_names": [
+        "Host",
+        "User-Agent",
+        "Accept-Encoding",
+        "Accept",
+        "Connection"
+      ],
+      "host": "target:8080",
+      "method": "GET",
+      "path": "/body-lines/body-lines",
+      "port": 8080,
+      "rejected": false,
+      "request_line": "",
+      "status": 200,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "body-lines"
+}

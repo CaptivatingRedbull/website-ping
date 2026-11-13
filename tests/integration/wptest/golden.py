@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import time
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,7 @@ RESPONSE_SOURCETYPE = "web_ping:response"
 NUMBER = "<number>"
 VOLATILE = "<volatile>"
 TIME = "<time>"
+ARRIVAL_DAY = "<arrival day>"
 TIME_FIELDS = frozenset({"total_time", "request_time"})
 VOLATILE_HEADERS = frozenset(
     {"date", "server", "expires", "last-modified", "age", "etag", "via", "x-cache",
@@ -32,20 +34,18 @@ VOLATILE_HEADERS = frozenset(
 )  # fmt: skip
 NEAR_INDEX_TIME = 600.0
 """An event _time this close to _indextime was assigned at arrival, so it is volatile.
-A _time further away was extracted from the event and is kept."""
+A _time further away was extracted from the event and is kept (see normalise_time)"""
 ANY_FIELD = "*"
 
 ALLOWED_DIFFERENCES: Mapping[str, Mapping[str, str]] = {
     # title -> {field -> reason}; "*" as title applies to every scenario,
     # "*" as field allows every field of that scenario.
     "*": {"error": "new in website-ping (additive)"},
-    "slow-body": {ANY_FIELD: "timeout is a total deadline in website-ping (commit 08)"},
-    "trickled-body": {
-        ANY_FIELD: "timeout is a total deadline in website-ping (commit 08)"
-    },
-    "ntlm-offered": {ANY_FIELD: "NTLM not supported in website-ping (D4)"},
+    "slow-body": {ANY_FIELD: "timeout is a total deadline in website-ping"},
+    "trickled-body": {ANY_FIELD: "timeout is a total deadline in website-ping"},
+    "ntlm-offered": {ANY_FIELD: "NTLM not supported in website-ping"},
     # Content scenarios whose decoding relied on chardet: add after the capture,
-    # one entry per title whose hashes differ under the D9 rules.
+    # one entry per title whose hashes differ without charset detection.
 }
 
 EXPORT_FIELDS = "wptest_raw wptest_time wptest_indextime wptest_cd wptest_server"
@@ -148,11 +148,21 @@ def normalise_raw(raw: str, sourcetype: str) -> str:
 
 
 def normalise_time(event_time: str, index_time: str) -> str:
+    """TIME for a _time assigned at arrival. A _time Splunk took from the event
+    text is kept as UTC ISO 8601; when it falls on the day of arrival (Splunk
+    took only the time of day), the date is ARRIVAL_DAY so the fixture does
+    not depend on the day of the capture."""
     try:
-        near = abs(float(event_time) - float(index_time)) <= NEAR_INDEX_TIME
+        event, index = float(event_time), float(index_time)
     except ValueError:
         return event_time
-    return TIME if near else event_time
+    if abs(event - index) <= NEAR_INDEX_TIME:
+        return TIME
+    parsed = time.gmtime(event)
+    text = time.strftime("%Y-%m-%dT%H:%M:%SZ", parsed)
+    if parsed[:3] == time.gmtime(index)[:3]:
+        return ARRIVAL_DAY + text[10:]
+    return text
 
 
 # ---- Events ----------------------------------------------------------------
@@ -227,6 +237,16 @@ def event_time(result: Mapping[str, FieldValue]) -> float:
     return float(_single(result.get("wptest_time", "0")))
 
 
+def arrival_time(result: Mapping[str, FieldValue]) -> float:
+    """_indextime: when the event arrived. Unlike _time it cannot come from a date
+    in the event text, so it orders the checks of one stanza."""
+    return float(_single(result.get("wptest_indextime", "0")))
+
+
+def arrival_order(result: Mapping[str, FieldValue]) -> tuple[float, float]:
+    return arrival_time(result), event_time(result)
+
+
 # ---- Request logs ----------------------------------------------------------
 
 
@@ -239,6 +259,18 @@ class TargetRequest:
     authorization: str
     status: int
     client_cn: str = ""
+    host: str = ""
+    accept: str = ""
+    accept_encoding: str = ""
+    connection: str = ""
+    cookie: str = ""
+    """Cookie names only."""
+    header_names: tuple[str, ...] = ()
+    """Request header names in the order received."""
+    request_line: str = ""
+    """Latin-1 decoded; only for the path route and rejected requests."""
+    rejected: bool = False
+    """The target's HTTP parser refused the request line (status 400)."""
 
 
 @dataclass(frozen=True)
@@ -260,6 +292,16 @@ def target_request(record: Mapping[str, object]) -> TargetRequest:
         authorization=str(record.get("authorization", "")),
         status=int(str(record.get("status", 0))),
         client_cn=str(record.get("client_cn", "")),
+        host=str(record.get("host", "")),
+        accept=str(record.get("accept", "")),
+        accept_encoding=str(record.get("accept_encoding", "")),
+        connection=str(record.get("connection", "")),
+        cookie=str(record.get("cookie", "")),
+        header_names=tuple(
+            str(name) for name in cast("list[object]", record.get("header_names", []))
+        ),
+        request_line=str(record.get("request_line", "")),
+        rejected=record.get("rejected") is True,
     )
 
 
@@ -295,7 +337,7 @@ class Capture:
 
 
 REQUEST_SLACK = 1.0
-"""Seconds after the last kept event's _time in which its requests may be logged.
+"""Seconds after the last kept event's arrival in which its requests may be logged.
 The next check of the same stanza starts an interval (at least 60 s) later."""
 
 
@@ -309,17 +351,19 @@ def select_capture(
     """The first min_events checks of one scenario, with their body events and
     the requests made for them.
 
-    results are the export rows of the scenario's source, oldest first. The
-    requests kept are those logged between since and the last kept event
-    (plus REQUEST_SLACK), so later checks during the wait do not count. With no
+    results are the export rows of the scenario's source in arrival order
+    (arrival_order). The requests kept are those logged between since and the
+    arrival of the last kept event (plus REQUEST_SLACK), so later checks during
+    the wait do not count. Arrival, not _time, bounds the window: an event whose
+    _time Splunk took from its text would otherwise end it years early. With no
     event at all, every request since the mark is kept, to show what happened.
     """
     checks = [
         r for r in results if _single(r.get("sourcetype", "")) == CHECK_SOURCETYPE
     ]
     kept = checks[: scenario.min_events]
-    until = event_time(kept[-1]) + REQUEST_SLACK if kept else math.inf
-    events = [r for r in results if event_time(r) <= until]
+    until = arrival_time(kept[-1]) + REQUEST_SLACK if kept else math.inf
+    events = [r for r in results if arrival_time(r) <= until]
     requests = [
         target_request(record)
         for record in target_log

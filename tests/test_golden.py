@@ -73,7 +73,12 @@ def test_normalise_raw_keeps_empty_times_and_response_bodies() -> None:
 
 def test_normalise_time() -> None:
     assert golden.normalise_time("1000.5", "1001") == golden.TIME
-    assert golden.normalise_time("315532800", "1763000000") == "315532800"
+    assert golden.normalise_time("315532800", "1763000000") == "1980-01-01T00:00:00Z"
+    # 2026-11-13T03:04:05Z, arrived 2026-11-13T05:06:40Z: only the time of day
+    assert (
+        golden.normalise_time("1794539045", "1794546400") == "<arrival day>T03:04:05Z"
+    )
+    assert golden.normalise_time("x", "1") == "x"
 
 
 def test_event_from_result_normalises_fields() -> None:
@@ -225,6 +230,37 @@ def test_select_capture_keeps_first_checks_and_their_requests() -> None:
     assert [r.path for r in item.requests] == ["/big/10/body"]
 
 
+def test_select_capture_window_ends_at_arrival_not_at_event_time() -> None:
+    scenario = ParityScenario("date-in-url", "http://target:8080/done/d?d=x")
+    parsed = row(100)
+    parsed["wptest_time"] = "1577934245"  # 2020-01-02, taken from the event text
+    later = row(160)
+    later["wptest_time"] = "1577934245"
+    target_log: list[dict[str, object]] = [
+        {"time": 99.0, "port": 8080, "path": "/done/d?d=x", "status": 200},
+        {"time": 159.0, "port": 8080, "path": "/done/d?d=x", "status": 200},
+    ]
+    results = sorted([later, parsed], key=golden.arrival_order)
+    item = golden.select_capture(scenario, results, target_log, [], since=50)
+    assert len(item.events) == 1
+    assert item.events[0].fields["_time"] == "2020-01-02T03:04:05Z"
+    assert len(item.requests) == 1
+
+
+def test_target_request_reads_header_fields() -> None:
+    request = golden.target_request(
+        {"port": 8080, "path": "/path/x/a b", "status": 400, "host": "target:8080",
+         "accept": "*/*", "accept_encoding": "gzip, deflate",
+         "connection": "keep-alive", "cookie": "a,b",
+         "header_names": ["Host", "Accept"], "request_line": "GET /path/x/a b HTTP/1.1",
+         "rejected": True}
+    )  # fmt: skip
+    assert request.header_names == ("Host", "Accept")
+    assert (request.accept, request.cookie, request.rejected) == ("*/*", "a,b", True)
+    assert golden.target_request({"port": 8080}).header_names == ()
+    assert golden.target_request({"port": 8080}).rejected is False
+
+
 def test_select_capture_without_events_keeps_every_request() -> None:
     scenario = ParityScenario(
         "proxy-plain", "http://target:8080/done/proxy-plain", conf="plain"
@@ -244,7 +280,18 @@ def test_capture_round_trip(tmp_path: Path) -> None:
         "headers",
         True,
         (event('header_X-Wptest-Space="a b \\"c\\""', **{"header_Set-Cookie": "a=1"}),),
-        (golden.TargetRequest(8080, "GET", "/headers/headers", "ua", "", 200),),
+        (
+            golden.TargetRequest(
+                8080,
+                "GET",
+                "/headers/headers",
+                "ua",
+                "",
+                200,
+                host="target:8080",
+                header_names=("Host", "User-Agent"),
+            ),
+        ),
         (ProxyRequest("CONNECT", "target:8443", "TCP_TUNNEL/200", "-", "-"),),
     )
     golden.write_capture(tmp_path, item)

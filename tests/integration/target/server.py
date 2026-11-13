@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import gzip
 import hashlib
 import hmac
 import json
@@ -18,7 +19,8 @@ import ssl
 import sys
 import threading
 import time
-from collections.abc import Sequence
+import zlib
+from collections.abc import Mapping, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, cast
 from urllib.request import parse_http_list, parse_keqv_list
@@ -48,6 +50,21 @@ CONTENT_CASES: dict[str, tuple[str, bytes]] = {
     "binary": ("application/octet-stream", bytes(range(256))),
 }
 
+ENCODED_BODY = _HTML.encode("utf-8")
+ENCODED_CONTENT_TYPE = "text/html; charset=utf-8"
+COOKIE_NAME = "wptest_session"
+COOKIE_VALUE = "ok"
+BODY_LINES = (
+    "WPTEST-MARKER first line\n"
+    "second line\n"
+    "2021-03-04T05:06:07Z third line starts with a date\n"
+    "fourth line\n"
+    "fifth line\n"
+).encode("ascii")
+BODY_BINARY = (
+    b"WPTEST-MARKER nul \x00 vt \x0b us \x1f invalid utf-8 \xff\xfe \xc3\x28 end\n"
+)
+
 _lock = threading.Lock()
 _repeats: dict[str, int] = {}
 _nonces: dict[str, float] = {}
@@ -76,6 +93,40 @@ def client_cn(connection: object) -> str:
 
 def big_body(size: int) -> bytes:
     return (b"0123456789" * (size // 10 + 1))[:size]
+
+
+def gzip_body(body: bytes) -> bytes:
+    """gzip with a fixed header time, so the bytes are the same on every request."""
+    return gzip.compress(body, mtime=0)
+
+
+def deflate_body(body: bytes, raw: bool) -> bytes:
+    """Content-Encoding deflate: zlib-wrapped as RFC 9110 says, or raw as some servers send."""
+    wbits = -zlib.MAX_WBITS if raw else zlib.MAX_WBITS
+    compressor = zlib.compressobj(wbits=wbits)
+    return compressor.compress(body) + compressor.flush()
+
+
+def accepts_gzip(header: str) -> bool:
+    codings = [part.split(";", 1)[0].strip().lower() for part in header.split(",")]
+    return "gzip" in codings
+
+
+def cookie_names(header: str) -> str:
+    """The cookie names of a Cookie header in the order sent, never their values."""
+    names = [part.split("=", 1)[0].strip() for part in header.split(";")]
+    return ",".join(name for name in names if name)
+
+
+def has_cookie(header: str, name: str, value: str) -> bool:
+    pairs = [part.strip().split("=", 1) for part in header.split(";")]
+    return [name, value] in pairs
+
+
+def request_line(raw: bytes) -> str:
+    """The request line as received, decoded as Latin-1 so every byte maps to one
+    character: line.encode("latin-1") gives the original bytes back."""
+    return raw.rstrip(b"\r\n").decode("latin-1")
 
 
 def _md5(text: str) -> str:
@@ -139,9 +190,28 @@ def basic_ok(header: str) -> bool:
     return hmac.compare_digest(decoded, f"{AUTH_USER}:{AUTH_PASSWORD}")
 
 
+ENCODED_ROUTES = frozenset({"gzip", "gzip-forced", "deflate", "deflate-raw"})
+EMPTY_REQUEST: Mapping[str, object] = {
+    "method": "",
+    "path": "",
+    "user_agent": "",
+    "authorization": "",
+    "status": 0,
+    "host": "",
+    "accept": "",
+    "accept_encoding": "",
+    "connection": "",
+    "cookie": "",
+    "header_names": [],
+}
+"""Every key of a request log record, for records with no parsed request."""
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "wptest-target"
+    raw_requestline: bytes
+    """Set by http.server before parse_request; not declared in its type stubs."""
 
     def log_message(self, format: str, *args: object) -> None:
         pass
@@ -150,7 +220,7 @@ class Handler(BaseHTTPRequestHandler):
     def port(self) -> int:
         return int(self.connection.getsockname()[1])
 
-    def _log(self, status: int) -> None:
+    def _log(self, status: int, with_request_line: bool = False) -> None:
         record: dict[str, object] = {
             "port": self.port,
             "method": self.command,
@@ -158,18 +228,47 @@ class Handler(BaseHTTPRequestHandler):
             "user_agent": self.headers.get("User-Agent", ""),
             "authorization": self.headers.get("Authorization", "").split(" ", 1)[0],
             "status": status,
+            "host": self.headers.get("Host", ""),
+            "accept": self.headers.get("Accept", ""),
+            "accept_encoding": self.headers.get("Accept-Encoding", ""),
+            "connection": self.headers.get("Connection", ""),
+            "cookie": cookie_names(self.headers.get("Cookie", "")),
+            "header_names": list(self.headers.keys()),
         }
+        if with_request_line:
+            record["request_line"] = request_line(self.raw_requestline)
         if self.port == MTLS_PORT:
             record["client_cn"] = client_cn(self.connection)
         log(record)
+
+    def parse_request(self) -> bool:
+        """Log a request line that http.server rejects, such as one with a raw space
+        in the path. The error response has already been sent."""
+        if super().parse_request():
+            return True
+        line = request_line(self.raw_requestline)
+        words = line.split(" ")
+        log(
+            {
+                **EMPTY_REQUEST,
+                "port": self.port,
+                "method": words[0] if len(words) > 1 else "",
+                "path": " ".join(words[1:-1]),
+                "status": 400,
+                "request_line": line,
+                "rejected": True,
+            }
+        )
+        return False
 
     def _send(
         self,
         status: int,
         body: bytes = b"ok",
         headers: Sequence[tuple[str, str]] = (),
+        with_request_line: bool = False,
     ) -> None:
-        self._log(status)
+        self._log(status, with_request_line)
         self.send_response(status)
         for key, value in headers:
             self.send_header(key, value)
@@ -248,6 +347,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._slow(int(args[0]))
             elif route == "auth" and len(args) == 2:
                 self._auth(args[0])
+            elif route in ENCODED_ROUTES and len(args) == 1:
+                self._encoded(route)
+            elif route == "cookie" and len(args) == 1:
+                self._cookie(args[0])
+            elif route == "path" and len(args) >= 1:
+                self._send(200, with_request_line=True)
+            elif route == "body-lines" and len(args) == 1:
+                self._send(
+                    200, BODY_LINES, [("Content-Type", "text/plain; charset=utf-8")]
+                )
+            elif route == "body-binary" and len(args) == 1:
+                self._send(
+                    200, BODY_BINARY, [("Content-Type", "text/plain; charset=utf-8")]
+                )
             else:
                 self._send(404, b"no such route")
         except (BrokenPipeError, ConnectionResetError):
@@ -265,6 +378,36 @@ class Handler(BaseHTTPRequestHandler):
             return
         time.sleep(milliseconds / 1000)
         self._send(200)
+
+    def _encoded(self, route: str) -> None:
+        """The same HTML body, compressed as the route says. gzip/ compresses only
+        when the request accepts gzip; the others always compress."""
+        headers = [("Content-Type", ENCODED_CONTENT_TYPE)]
+        if route == "gzip" and not accepts_gzip(
+            self.headers.get("Accept-Encoding", "")
+        ):
+            self._send(200, ENCODED_BODY, headers)
+            return
+        if route in ("gzip", "gzip-forced"):
+            body, coding = gzip_body(ENCODED_BODY), "gzip"
+        else:
+            body = deflate_body(ENCODED_BODY, raw=route == "deflate-raw")
+            coding = "deflate"
+        self._send(200, body, [*headers, ("Content-Encoding", coding)])
+
+    def _cookie(self, title: str) -> None:
+        """200 with the session cookie; without it, set it and redirect to the same URL."""
+        if has_cookie(self.headers.get("Cookie", ""), COOKIE_NAME, COOKIE_VALUE):
+            self._send(200, b"cookie ok")
+            return
+        self._send(
+            302,
+            b"",
+            [
+                ("Set-Cookie", f"{COOKIE_NAME}={COOKIE_VALUE}; Path=/"),
+                ("Location", f"/cookie/{title}"),
+            ],
+        )
 
     def _auth(self, scheme: str) -> None:
         header = self.headers.get("Authorization", "")
@@ -323,16 +466,7 @@ def silent(port: int) -> None:
     listener = socket.create_server(("0.0.0.0", port))
     while True:
         connection, _ = listener.accept()
-        log(
-            {
-                "port": port,
-                "method": "",
-                "path": "",
-                "user_agent": "",
-                "authorization": "",
-                "status": 0,
-            }
-        )
+        log({**EMPTY_REQUEST, "port": port})
         timer = threading.Timer(60, connection.close)
         timer.daemon = True
         timer.start()

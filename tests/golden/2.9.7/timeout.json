@@ -27,11 +27,19 @@
   "proxy_requests": [],
   "requests": [
     {
+      "accept": "",
+      "accept_encoding": "",
       "authorization": "",
       "client_cn": "",
+      "connection": "",
+      "cookie": "",
+      "header_names": [],
+      "host": "",
       "method": "",
       "path": "",
       "port": 8081,
+      "rejected": false,
+      "request_line": "",
       "status": 0,
       "user_agent": ""
     }

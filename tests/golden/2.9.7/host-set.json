@@ -1,0 +1,57 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=host-set url=http://target:8080/done/host-set timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=444bcb3a3fcf8389296c49467f27e1d6 content_sha224=05c2e2fa42d48e0ff1af0586e3033a9e31bc8930f90a1cc2e4029a2b content_size=2",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "444bcb3a3fcf8389296c49467f27e1d6",
+        "content_sha224": "05c2e2fa42d48e0ff1af0586e3033a9e31bc8930f90a1cc2e4029a2b",
+        "content_size": "2",
+        "host": "wptest-host",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "200",
+        "source": "web_ping://host-set",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "host-set",
+        "total_time": "<number>",
+        "url": "http://target:8080/done/host-set"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "accept": "*/*",
+      "accept_encoding": "gzip, deflate",
+      "authorization": "",
+      "client_cn": "",
+      "connection": "keep-alive",
+      "cookie": "",
+      "header_names": [
+        "Host",
+        "User-Agent",
+        "Accept-Encoding",
+        "Accept",
+        "Connection"
+      ],
+      "host": "target:8080",
+      "method": "GET",
+      "path": "/done/host-set",
+      "port": 8080,
+      "rejected": false,
+      "request_line": "",
+      "status": 200,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "host-set"
+}

@@ -29,6 +29,7 @@ DEFAULT_INTERVAL = "60"
 SILENT_PORT = 8081
 CONTENT_STRING = "Grüße"
 MARKER = "WPTEST-MARKER"
+EMBEDDED_DATE = "2020-01-02T03:04:05"
 
 Password = tuple[str, str, str]
 """(realm, username, password) of a storage/passwords entry."""
@@ -92,6 +93,8 @@ def _s(**settings: str) -> Mapping[str, str]:
 AUTH = _s(username=AUTH_USER, password=AUTH_PASSWORD)
 TIMEOUT_5 = _s(timeout="5")
 CERTS = SPLUNK_CERT_DIR
+MATCH = _s(should_contain_string=MARKER)
+BODY = _s(return_body="1")
 
 PARITY_SCENARIOS: tuple[ParityScenario, ...] = (
     *(ParityScenario(f"status-{n}", f"{T}/status/{n}") for n in (200, 404, 503)),
@@ -146,7 +149,7 @@ PARITY_SCENARIOS: tuple[ParityScenario, ...] = (
     ParityScenario("auth-wrong", f"{T}/auth/basic/auth-wrong",
                    _s(username=AUTH_USER, password="wrong")),
     ParityScenario("ntlm-offered", f"{T}/auth/ntlm/ntlm-offered", AUTH,
-                   notes="NTLM not supported in website-ping (D4)"),
+                   notes="NTLM not supported in website-ping"),
     ParityScenario("mtls-combined", f"https://target:{MTLS_PORT}/mtls-combined",
                    _s(client_certificate=f"{CERTS}/client-combined.pem")),
     ParityScenario("mtls-split", f"https://target:{MTLS_PORT}/mtls-split",
@@ -157,8 +160,30 @@ PARITY_SCENARIOS: tuple[ParityScenario, ...] = (
     ParityScenario("proxy-https", "https://target:8443/proxy-https", conf="plain"),
     ParityScenario("proxy-auth", f"{T}/done/proxy-auth", conf="auth"),
     ParityScenario("proxy-ignore", f"{T}/done/proxy-ignore", conf="ignore"),
-    ParityScenario("user-agent", f"{T}/done/user-agent",
+        ParityScenario("user-agent", f"{T}/done/user-agent",
                    _s(user_agent="wptest-custom-agent")),
+    ParityScenario("request-headers", f"{T}/done/request-headers",
+                   notes="request header names, order and values in the target log"),
+    *(
+        ParityScenario(route, f"{T}/{route}/{route}", MATCH)
+        for route in ("gzip", "gzip-forced", "deflate", "deflate-raw")
+    ),
+    ParityScenario("cookie-redirect", f"{T}/cookie/cookie-redirect",
+                   notes="200 only when the cookie set by the redirect is sent back"),
+    ParityScenario("idn-host", f"http://münchen.test:{TARGET_PORT}/done/idn-host"),
+    ParityScenario("idn-eszett", f"http://straße.test:{TARGET_PORT}/done/idn-eszett",
+                   notes="Host header shows strasse.test (IDNA 2003) or"
+                         " xn--strae-oqa.test (IDNA 2008)"),
+    ParityScenario("path-unicode", f"{T}/path/path-unicode/Müller?q=München"),
+    ParityScenario("path-space", f"{T}/path/path-space/a b"),
+    ParityScenario("body-lines", f"{T}/body-lines/body-lines", BODY),
+    ParityScenario("body-binary", f"{T}/body-binary/body-binary", BODY),
+    ParityScenario("date-in-url", f"{T}/done/d?d={EMBEDDED_DATE}",
+                   notes="date at the edge of the default timestamp lookahead"),
+    ParityScenario("date-in-title", f"{T}/done/date-in-title",
+                   _s(title=f"{EMBEDDED_DATE} check"),
+                   notes="date well inside the default timestamp lookahead"),
+    ParityScenario("host-set", f"{T}/done/host-set", _s(host="wptest-host")),
 )  # fmt: skip
 
 CONF_STANZAS: Mapping[str, Mapping[str, str]] = MappingProxyType(

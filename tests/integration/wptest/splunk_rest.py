@@ -112,6 +112,20 @@ class SplunkRest:
         )
         return parse_results(self.last_result)
 
+    def export_in_app(self, app: str, query: str) -> str:
+        """The raw export output of a search run as admin in an app's namespace,
+        so the app's macros, tags and saved searches apply. All time, final
+        results only."""
+        return self._call(
+            f"/servicesNS/admin/{app}/search/jobs/export",
+            {
+                "search": query,
+                "output_mode": "json",
+                "earliest_time": "0",
+                "preview": "false",
+            },
+        )
+
     def app(self, name: str) -> dict[str, object]:
         entry = cast(
             "list[dict[str, object]]", self.get(f"/services/apps/local/{name}")["entry"]

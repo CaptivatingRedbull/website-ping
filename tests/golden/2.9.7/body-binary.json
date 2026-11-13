@@ -1,0 +1,69 @@
+{
+  "complete": true,
+  "events": [
+    {
+      "_raw": "response_code=200 total_time=<number> request_time=<number> timed_out=False title=body-binary url=http://target:8080/body-binary/body-binary timeout=30 proxy_server=\"\" proxy_type=http proxy_port=\"\" content_md5=9ee72b4d679e9f008371097db24e2b70 content_sha224=4f5bb5ba1076e87220b492492e033ca137f2bd5abf940ad34ebcef1b content_size=54",
+      "fields": {
+        "_time": "<time>",
+        "content_md5": "9ee72b4d679e9f008371097db24e2b70",
+        "content_sha224": "4f5bb5ba1076e87220b492492e033ca137f2bd5abf940ad34ebcef1b",
+        "content_size": "54",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "proxy_port": "",
+        "proxy_server": "",
+        "proxy_type": "http",
+        "request_time": "<number>",
+        "response_code": "200",
+        "source": "web_ping://body-binary",
+        "sourcetype": "web_ping",
+        "timed_out": "False",
+        "timeout": "30",
+        "timestamp": "none",
+        "title": "body-binary",
+        "total_time": "<number>",
+        "url": "http://target:8080/body-binary/body-binary"
+      }
+    },
+    {
+      "_raw": "WPTEST-MARKER nul  vt \u000b us \u001f invalid utf-8 �� �( end",
+      "fields": {
+        "_time": "<time>",
+        "host": "$decideOnStartup",
+        "index": "main",
+        "linecount": "1",
+        "source": "web_ping://body-binary",
+        "sourcetype": "web_ping:response",
+        "timestamp": "none"
+      }
+    }
+  ],
+  "proxy_requests": [],
+  "requests": [
+    {
+      "accept": "*/*",
+      "accept_encoding": "gzip, deflate",
+      "authorization": "",
+      "client_cn": "",
+      "connection": "keep-alive",
+      "cookie": "",
+      "header_names": [
+        "Host",
+        "User-Agent",
+        "Accept-Encoding",
+        "Accept",
+        "Connection"
+      ],
+      "host": "target:8080",
+      "method": "GET",
+      "path": "/body-binary/body-binary",
+      "port": 8080,
+      "rejected": false,
+      "request_line": "",
+      "status": 200,
+      "user_agent": "Splunk Website Monitoring (+https://splunkbase.splunk.com/app/1493/)"
+    }
+  ],
+  "title": "body-binary"
+}
