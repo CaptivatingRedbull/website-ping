@@ -45,8 +45,8 @@ user_agent = <string>
 * Default: Splunk Website Ping/<app version>
 
 should_contain_string = <string>
-* Text that must appear in the response body. If it does not, the check reports
-  has_expected_string=false.
+* Text that must appear in the response body. If it does not, the event has
+  the field has_expected_string set to false.
 * Default: blank (no content check)
 
 timeout = <integer>
