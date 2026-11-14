@@ -9,10 +9,12 @@ import subprocess
 import sys
 import tarfile
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from wptest.stack import SPLUNK, Stack
+from wptest.versions import Runtime
 from wptest.wait import Stages, wait_for
 
 ROOT = Path(__file__).absolute().parents[3]
@@ -132,26 +134,64 @@ def build_package() -> Package:
     )
 
 
-def build_config_app(source: Path, output: Path, top: str = CONFIG_APP) -> Path:
-    """Archive a config app: top folder website_ping_inputs, uid 0, 644 files, 755 folders."""
+def python_override(runtime: Runtime) -> dict[str, str]:
+    """Extra config app files that make Splunk start the input on runtime's interpreter.
+
+    Any app's local/ takes precedence over website_ping/default/, so this replaces
+    the app's python.required. Empty when the app's own setting already selects it.
+    """
+    if not runtime.overridden:
+        return {}
+    return {"local/inputs.conf": f"[web_ping]\npython.required = {runtime.python}\n"}
+
+
+def _tar_entry(name: str, mode: int, data: bytes | None = None) -> tarfile.TarInfo:
+    info = tarfile.TarInfo(name)
+    info.uid = info.gid = 0
+    info.mtime = int(time.time())
+    info.mode = mode
+    if data is None:
+        info.type = tarfile.DIRTYPE
+    else:
+        info.size = len(data)
+    return info
+
+
+def build_config_app(
+    source: Path,
+    output: Path,
+    top: str = CONFIG_APP,
+    extra: Mapping[str, str] | None = None,
+) -> Path:
+    """Archive a config app: top folder website_ping_inputs, uid 0, 644 files, 755 folders.
+
+    extra adds text files by path relative to the app folder; they must not exist
+    in source.
+    """
+    folders: set[str] = set()
     with tarfile.open(output, "w:gz") as tar:
         paths = sorted(source.rglob("*"))
         for path in [source, *paths]:
             relative = path.relative_to(source).as_posix()
             name = top if relative == "." else f"{top}/{relative}"
-            info = tarfile.TarInfo(name)
-            info.uid = info.gid = 0
-            info.mtime = int(time.time())
             if path.is_dir():
-                info.type = tarfile.DIRTYPE
-                info.mode = 0o755
-                tar.addfile(info)
+                folders.add(relative)
+                tar.addfile(_tar_entry(name, 0o755))
             else:
                 data = path.read_bytes()
                 script = relative.startswith("bin/") and path.suffix == ".py"
-                info.mode = 0o755 if script else 0o644
-                info.size = len(data)
+                info = _tar_entry(name, 0o755 if script else 0o644, data)
                 tar.addfile(info, io.BytesIO(data))
+        for relative, text in sorted((extra or {}).items()):
+            if (source / relative).exists():
+                raise ValueError(f"{relative} is already in {source}")
+            parents = PurePosixPath(relative).parents
+            for folder in sorted(str(p) for p in parents if str(p) != "."):
+                if folder not in folders:
+                    folders.add(folder)
+                    tar.addfile(_tar_entry(f"{top}/{folder}", 0o755))
+            data = text.encode("utf-8")
+            tar.addfile(_tar_entry(f"{top}/{relative}", 0o644, data), io.BytesIO(data))
     output.chmod(0o644)
     return output
 

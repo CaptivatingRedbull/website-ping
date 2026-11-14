@@ -22,6 +22,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Splunk version line to test (default: all)",
     )
     group.addoption(
+        "--python",
+        choices=("3.9", "3.13", "all"),
+        default=None,
+        help="interpreter on lines that ship several (10.6): 3.9, 3.13 or all;"
+        " default: the one the app selects (3.13). 9.4 always runs 3.9",
+    )
+    group.addoption(
         "--keep",
         action="store_true",
         help="keep the first failing stack and stop the session",

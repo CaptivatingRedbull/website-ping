@@ -2,7 +2,8 @@
 
 These tests install the built website-ping package into Splunk Enterprise
 9.4.17 and 10.6.1.1 running in Docker, let Splunk run the input, and check the
-events that reach the index. The design is in
+events that reach the index. 9.4 runs the input on Python 3.9; 10.6 ships 3.13
+and 3.9 and runs it on either. The design is in
 `docs/designs/website-ping-test-harness.md`.
 
 A bare `pytest` never runs them. They run only when a command-line path names
@@ -33,7 +34,8 @@ any container starts.
 
 ```sh
 export WPTEST_ACCEPT_SPLUNK_TERMS=yes
-pytest tests/integration -m "single or network"   # standalone stack, both lines
+pytest tests/integration -m "single or network"   # standalone stack, 9.4/3.9 and 10.6/3.13
+pytest tests/integration -m "single or network" --python all   # adds 10.6/3.9 (release)
 pytest tests/integration -m no_route               # no-route stack
 pytest tests/integration -m distributed            # distributed stack
 pytest tests/integration -m release                # AppInspect on the tarball
@@ -48,6 +50,14 @@ Options:
 * `--keep` keeps the first failing stack running and stops the session. Its
   admin password is in `tests/integration/.evidence/<run>/password`, readable
   only by you. Remove kept stacks with `scripts/test-clean.sh`.
+* `--python 3.9`, `--python 3.13` or `--python all` picks the interpreter on
+  10.6. Without it, 10.6 runs 3.13, which the app's own `python.required`
+  selects. For 3.9 the config app gets `local/inputs.conf` with
+  `[web_ping] python.required = 3.9`. 9.4 always runs 3.9. The probe
+  (`spike`) and Website Monitoring 2.9.7 (`golden`) choose their own
+  interpreter, so they run only on each line's default. Test ids and stack
+  names carry the runtime, for example `[10.6-py3.9]` and
+  `wptest-106-py39-standalone-<id>`.
 
 A standalone stack takes about 7 minutes per line, the no-route stack about
 2 minutes and the distributed stack about 10 minutes.

@@ -9,6 +9,7 @@ from logger import log, setup_logging
 from ping_check import check_url, event_fields
 from ping_config import ConfigError, build_settings
 from ping_events import write_event
+from wp_version import runtime_versions
 
 SCHEME_ARGS: tuple[tuple[str, str, str], ...] = (
     ("url", "URL", "The URL to check (http or https)"),
@@ -90,7 +91,7 @@ def ping() -> None:
     for warning in warnings:
         log.warning("%s", warning)
     log.debug("effective settings: %s", settings)
-    log.info("starting check url=%s", settings["url"])
+    log.info("starting check url=%s %s", settings["url"], runtime_versions())
     result = check_url(settings)
     log.info(
         "check done code=%d time=%.3f timed_out=%s",

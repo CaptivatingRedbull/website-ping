@@ -28,7 +28,7 @@ from wptest.stack import (
     render,
     write_env_file,
 )
-from wptest.versions import LINES
+from wptest.versions import ALL_RUNTIMES, LINES, Runtime, select_runtimes
 from wptest.wait import HEALTHY, INSTALL, PROBE, STARTED, Stages, wait_for
 
 TERMS_VAR = "WPTEST_ACCEPT_SPLUNK_TERMS"
@@ -46,17 +46,26 @@ TOPOLOGY_OF_MARKER = {
 }
 TOPOLOGY_ORDER = ("standalone", "noroute", "spike", "golden", "distributed")
 OPT_IN_MARKERS = ("spike", "golden")
+OWN_INTERPRETER_MARKERS = ("spike", "golden")
+"""Tests of apps that are not website-ping and choose their interpreter themselves."""
 MANAGER_KEY = pytest.StashKey["StackManager"]()
 
 
-def selected_lines(config: pytest.Config) -> list[str]:
-    choice = str(config.getoption("--splunk-line"))
-    return list(LINES) if choice == "all" else [choice]
+def selected_runtimes(config: pytest.Config) -> list[Runtime]:
+    python = config.getoption("--python")
+    try:
+        return select_runtimes(
+            str(config.getoption("--splunk-line")),
+            None if python is None else str(python),
+        )
+    except ValueError as exc:
+        raise pytest.UsageError(str(exc)) from exc
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-    if "splunk_line" in metafunc.fixturenames:
-        metafunc.parametrize("splunk_line", selected_lines(metafunc.config))
+    if "runtime" in metafunc.fixturenames:
+        runtimes = selected_runtimes(metafunc.config)
+        metafunc.parametrize("runtime", runtimes, ids=[r.id for r in runtimes])
 
 
 def _topology(item: pytest.Item) -> str | None:
@@ -75,20 +84,43 @@ def _deselect_opt_in(config: pytest.Config, items: list[pytest.Item]) -> None:
         items[:] = [i for i in items if i not in deselected]
 
 
+def _deselect_interpreter_overrides(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """The python.required override only reaches website-ping's config app."""
+
+    def overridden(item: pytest.Item) -> bool:
+        callspec = getattr(item, "callspec", None)
+        runtime = callspec.params.get("runtime") if callspec is not None else None
+        return isinstance(runtime, Runtime) and runtime.overridden
+
+    deselected = [
+        i
+        for i in items
+        if overridden(i)
+        and any(i.get_closest_marker(m) for m in OWN_INTERPRETER_MARKERS)
+    ]
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = [i for i in items if i not in deselected]
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    """Drop opt-in tests, then group by line and topology so each stack starts once"""
+    """Drop opt-in tests and interpreter variants of other apps' tests, then group
+    by runtime and topology so each stack starts once"""
     _deselect_opt_in(config, items)
-    lines = list(LINES)
+    _deselect_interpreter_overrides(config, items)
+    runtimes = list(ALL_RUNTIMES)
 
     def key(item: pytest.Item) -> tuple[int, int]:
         callspec = getattr(item, "callspec", None)
-        line = callspec.params.get("splunk_line") if callspec is not None else None
+        runtime = callspec.params.get("runtime") if callspec is not None else None
         topology = _topology(item)
         return (
-            lines.index(line) if line in lines else len(lines),
+            runtimes.index(runtime) if runtime in runtimes else len(runtimes),
             TOPOLOGY_ORDER.index(topology) if topology else len(TOPOLOGY_ORDER),
         )
 
@@ -163,7 +195,7 @@ def leftover_stacks() -> list[str]:
 
 
 class StackManager:
-    """Starts and stops one stack at a time, keyed by line and topology."""
+    """Starts and stops one stack at a time, keyed by runtime and topology."""
 
     def __init__(
         self,
@@ -181,17 +213,21 @@ class StackManager:
         self.current: Stack | None = None
         self.kept: Stack | None = None
 
-    def get(self, line: str, topology: str) -> Stack:
+    def get(self, runtime: Runtime, topology: str) -> Stack:
         current = self.current
-        if current is not None and (current.line, current.topology) == (line, topology):
+        if current is not None and (current.runtime, current.topology) == (
+            runtime,
+            topology,
+        ):
             if current.setup_error is not None:
                 raise current.setup_error
             return current
         self.stop_current()
-        self._resource_gate(topology, line)
-        stack = Stack(line, topology, self.workdir, kept=self.keep)
+        self._resource_gate(topology, runtime.line)
+        stack = Stack(runtime, topology, self.workdir, kept=self.keep)
         self.current = stack
-        self.evidence.note(f"{stack.project}.image", LINES[line].pinned_image)
+        self.evidence.note(f"{stack.project}.image", LINES[runtime.line].pinned_image)
+        self.evidence.note(f"{stack.project}.python", runtime.python)
         try:
             SETUPS[topology](stack, self)
         except BaseException as exc:
@@ -337,9 +373,12 @@ def _start(stack: Stack, manager: StackManager) -> None:
     )
 
 
-def _config_archive(manager: StackManager, app: str) -> Path:
+def _config_archive(manager: StackManager, app: str, runtime: Runtime) -> Path:
+    """The config app for app, with the interpreter override runtime needs."""
     return install.build_config_app(
-        APPS_DIR / app, manager.workdir / f"website_ping_inputs-{app}.tar.gz"
+        APPS_DIR / app,
+        manager.workdir / f"website_ping_inputs-{app}-{runtime.id}.tar.gz",
+        extra=install.python_override(runtime),
     )
 
 
@@ -348,7 +387,11 @@ def setup_standalone(stack: Stack, manager: StackManager) -> None:
     _deliver_helpers(stack, manager, ("so1",))
     _probe(stack, manager, ("so1",))
     install.install_single(
-        stack, "so1", manager.package, _config_archive(manager, "standalone"), True
+        stack,
+        "so1",
+        manager.package,
+        _config_archive(manager, "standalone", stack.runtime),
+        True,
     )
     install.wait_registered(stack, "so1", "status-200", stack.stages)
     wait_for(
@@ -381,7 +424,11 @@ def setup_noroute(stack: Stack, manager: StackManager) -> None:
     _deliver_helpers(stack, manager, ("so1",))
     _probe(stack, manager, ("so1",))
     install.install_single(
-        stack, "so1", manager.package, _config_archive(manager, "no_route"), True
+        stack,
+        "so1",
+        manager.package,
+        _config_archive(manager, "no_route", stack.runtime),
+        True,
     )
     install.wait_registered(stack, "so1", "no-direct-route", stack.stages)
     wait_for(
@@ -407,7 +454,9 @@ def setup_distributed(stack: Stack, manager: StackManager) -> None:
     _probe(stack, manager, stack.splunk_services)
     stack.facts.update(
         install.install_distributed(
-            stack, manager.package, _config_archive(manager, "distributed")
+            stack,
+            manager.package,
+            _config_archive(manager, "distributed", stack.runtime),
         )
     )
     install.wait_registered(stack, "hf", "dist-check", stack.stages)
@@ -420,7 +469,7 @@ def setup_distributed(stack: Stack, manager: StackManager) -> None:
 
 
 def setup_spike(stack: Stack, manager: StackManager) -> None:
-    """Standalone compose file with only the probe app installed (commit 02)."""
+    """Standalone compose file with only the probe app installed."""
     _start(stack, manager)
     _deliver_helpers(stack, manager, ("so1",))
     _probe(stack, manager, ("so1",))
@@ -522,7 +571,8 @@ def harness(
         )
     lock = _take_lock()
     workdir = tmp_path_factory.mktemp("preflight")
-    violations = run_preflight(selected_lines(request.config), workdir)
+    lines = sorted({runtime.line for runtime in selected_runtimes(request.config)})
+    violations = run_preflight(lines, workdir)
     if violations:
         pytest.exit(
             "preflight refused the session:\n"
@@ -587,32 +637,32 @@ def stacks(
 
 
 @pytest.fixture
-def standalone(stacks: StackManager, splunk_line: str) -> Stack:
-    return stacks.get(splunk_line, "standalone")
+def standalone(stacks: StackManager, runtime: Runtime) -> Stack:
+    return stacks.get(runtime, "standalone")
 
 
 @pytest.fixture
-def no_route_stack(stacks: StackManager, splunk_line: str) -> Stack:
-    return stacks.get(splunk_line, "noroute")
+def no_route_stack(stacks: StackManager, runtime: Runtime) -> Stack:
+    return stacks.get(runtime, "noroute")
 
 
 @pytest.fixture
-def distributed_stack(stacks: StackManager, splunk_line: str) -> Stack:
-    return stacks.get(splunk_line, "distributed")
+def distributed_stack(stacks: StackManager, runtime: Runtime) -> Stack:
+    return stacks.get(runtime, "distributed")
 
 
 @pytest.fixture
-def spike_stack(stacks: StackManager, splunk_line: str) -> Stack:
-    return stacks.get(splunk_line, "spike")
+def spike_stack(stacks: StackManager, runtime: Runtime) -> Stack:
+    return stacks.get(runtime, "spike")
 
 
 @pytest.fixture
-def golden_stack(stacks: StackManager, splunk_line: str) -> Stack:
-    if splunk_line != legacy.LEGACY_LINE:
+def golden_stack(stacks: StackManager, runtime: Runtime) -> Stack:
+    if runtime.line != legacy.LEGACY_LINE:
         pytest.skip(
             f"Website Monitoring 2.9.7 is captured on {legacy.LEGACY_LINE} only"
         )
-    return stacks.get(splunk_line, "golden")
+    return stacks.get(runtime, "golden")
 
 
 @pytest.fixture

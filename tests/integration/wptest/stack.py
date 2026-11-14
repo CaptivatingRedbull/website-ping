@@ -12,7 +12,7 @@ from typing import cast
 
 from wptest.certs import SPLUNK_CERT_DIR
 from wptest.splunk_rest import Searcher, SplunkCli, SplunkRest
-from wptest.versions import LINES
+from wptest.versions import LINES, Runtime
 from wptest.wait import Stages
 
 INTEGRATION = Path(__file__).absolute().parent.parent
@@ -67,8 +67,10 @@ class DockerError(RuntimeError):
         self.stderr = stderr
 
 
-def project_name(line: str, topology: str) -> str:
-    return f"wptest-{line.replace('.', '')}-{topology}-{secrets.token_hex(3)}"
+def project_name(runtime: Runtime, topology: str) -> str:
+    line = runtime.line.replace(".", "")
+    python = runtime.python.replace(".", "")
+    return f"wptest-{line}-py{python}-{topology}-{secrets.token_hex(3)}"
 
 
 def write_env_file(path: Path, line: str, password: str, kept: bool) -> Path:
@@ -212,14 +214,17 @@ class HelperProbe:
 class Stack:
     """One compose project. Every command passes the env file; no password in arguments."""
 
-    def __init__(self, line: str, topology: str, workdir: Path, kept: bool) -> None:
-        self.line = line
+    def __init__(
+        self, runtime: Runtime, topology: str, workdir: Path, kept: bool
+    ) -> None:
+        self.runtime = runtime
+        self.line = runtime.line
         self.topology = topology
-        self.project = project_name(line, topology)
+        self.project = project_name(runtime, topology)
         self.password = "Wp" + secrets.token_urlsafe(18)
         workdir.mkdir(parents=True, exist_ok=True)
         self.env_file = write_env_file(
-            workdir / f"{self.project}.env", line, self.password, kept
+            workdir / f"{self.project}.env", runtime.line, self.password, kept
         )
         self.compose_file = COMPOSE_FILES[topology]
         self.stages = Stages()

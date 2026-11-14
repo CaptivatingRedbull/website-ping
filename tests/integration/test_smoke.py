@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 from wptest import install
@@ -10,7 +11,7 @@ from wptest.evidence import Evidence
 from wptest.install import Package
 from wptest.splunk_rest import events_query
 from wptest.stack import SPLUNK, Stack
-from wptest.versions import LINES
+from wptest.versions import Runtime
 from wptest.wait import wait_for
 
 pytestmark = pytest.mark.single
@@ -46,10 +47,30 @@ def test_btool_shows_app_defaults(standalone: Stack) -> None:
         assert not any(line.startswith(f"{key} ") for line in from_app), output
 
 
-def test_interpreter(standalone: Stack, splunk_line: str, evidence: Evidence) -> None:
+def start_line_query(since: float) -> str:
+    return (
+        "search index=_internal source=*splunkd.log* component=ExecProcessor"
+        f' "stanza=web_ping://status-200 starting check" _index_earliest={int(since)}'
+        " | head 1 | table _raw"
+    )
+
+
+def test_interpreter(standalone: Stack, runtime: Runtime, evidence: Evidence) -> None:
     exe = standalone.input_process("so1")["exe"]
     evidence.note(f"{standalone.project}.interpreter", exe)
-    assert os.path.basename(exe) == LINES[splunk_line].interpreter
+    assert os.path.basename(exe) == runtime.interpreter
+    searcher = standalone.searcher("so1")
+    rows = wait_for(
+        "start line with interpreter",
+        lambda: searcher.search(start_line_query(standalone.mark)) or None,
+        EVENT_TIMEOUT,
+        standalone.stages,
+    )
+    raw = rows[0]["_raw"]
+    evidence.note(f"{standalone.project}.start_line", raw)
+    match = re.search(r' python=(\S+) openssl="[^"]+"', raw)
+    assert match is not None, raw
+    assert match.group(1).startswith(f"{runtime.python}."), raw
 
 
 def test_bad_config_logs_error_and_writes_no_event(standalone: Stack) -> None:
