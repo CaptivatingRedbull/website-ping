@@ -217,7 +217,6 @@ _URL = "needs URL encoding of spaces and non-ASCII characters"
 
 PENDING: Mapping[str, str] = MappingProxyType(
     {
-        "interval-units": "needs the input's own scheduler (interval with time units)",
         **dict.fromkeys(("minus-one-25", "blank-25", "blank-31", "loop"), _REDIRECTS),
         **dict.fromkeys((f"content-{case}" for case in CONTENT_CASES), _CONTENT),
         **dict.fromkeys(("match-yes", "match-no"), _CONTENT),

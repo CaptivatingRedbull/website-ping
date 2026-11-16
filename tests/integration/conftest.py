@@ -5,10 +5,8 @@ from __future__ import annotations
 import configparser
 import fcntl
 import os
-import shlex
 import shutil
 from collections.abc import Callable, Generator, Iterator
-from datetime import datetime
 from pathlib import Path
 from typing import IO
 from urllib.parse import urlparse
@@ -263,6 +261,10 @@ class StackManager:
                     "modinput.log",
                     "grep -h web_ping /opt/splunk/var/log/splunk/splunkd.log || true\n",
                 ),
+                (
+                    "website_ping.log",
+                    "cat /opt/splunk/var/log/splunk/website_ping.log 2>&1 || true\n",
+                ),
             ):
                 try:
                     save(
@@ -403,21 +405,16 @@ def setup_standalone(stack: Stack, manager: StackManager) -> None:
     )
 
 
-def _logged_since(stack: Stack, service: str, text: str, since: float) -> bool:
-    """Whether splunkd.log has a line containing text, timestamped at or after since."""
-    output = stack.exec(
-        service,
-        f"grep -F {shlex.quote(text)} /opt/splunk/var/log/splunk/splunkd.log || true\n",
+def _logged_since(
+    stack: Stack, service: str, stanza: str, message: str, since: float
+) -> bool:
+    """Whether website_ping.log has a line of stanza containing message, timestamped
+    at or after since."""
+    prefix = f"stanza={stanza} "
+    return any(
+        logged >= since and prefix in line and message in line
+        for logged, line in stack.app_log(service)
     )
-    for line in output.splitlines():
-        stamp = " ".join(line.split()[:3])
-        try:
-            logged = datetime.strptime(stamp, "%m-%d-%Y %H:%M:%S.%f %z").timestamp()
-        except ValueError:
-            continue
-        if logged >= since:
-            return True
-    return False
 
 
 def setup_noroute(stack: Stack, manager: StackManager) -> None:
@@ -439,7 +436,8 @@ def setup_noroute(stack: Stack, manager: StackManager) -> None:
             if _logged_since(
                 stack,
                 "so1",
-                "stanza=web_ping://no-direct-route starting check",
+                "web_ping://no-direct-route",
+                "starting check",
                 stack.mark,
             )
             else None

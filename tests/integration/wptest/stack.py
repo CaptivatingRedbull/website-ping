@@ -7,6 +7,7 @@ import secrets
 import socket
 import subprocess
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 
@@ -140,6 +141,31 @@ echo "no web_ping.py process seen in 40 s" >&2
 exit 1
 """
 
+INPUT_PIDS_SCRIPT = r"""
+for d in /proc/[0-9]*; do
+  grep -qa 'web_ping[.]py' "$d/cmdline" 2>/dev/null || continue
+  exe=$(readlink "$d/exe" 2>/dev/null) || continue
+  case "$(basename "$exe")" in python*) echo "${d#/proc/}" ;; esac
+done
+"""
+
+APP_LOG = "/opt/splunk/var/log/splunk/website_ping.log"
+CHECKPOINT_DIR = "/opt/splunk/var/lib/splunk/modinputs/web_ping"
+APP_LOG_TIME = "%Y-%m-%d %H:%M:%S,%f %z"
+
+
+def parse_app_log(text: str) -> list[tuple[float, str]]:
+    """(epoch time, line) of each website_ping.log line, oldest first. Lines without
+    a timestamp are left out."""
+    lines: list[tuple[float, str]] = []
+    for line in text.splitlines():
+        try:
+            logged = datetime.strptime(" ".join(line.split()[:3]), APP_LOG_TIME)
+        except ValueError:
+            continue
+        lines.append((logged.timestamp(), line))
+    return sorted(lines, key=lambda item: item[0])
+
 
 @dataclass
 class ProbeResult:
@@ -206,8 +232,7 @@ class HelperProbe:
 
     def problems(self) -> list[str]:
         return [
-            f"{self.service}: {name} gave {self.codes.get(name, 'nothing')},"
-            f" expected {expected}"
+            f"{self.service}: {name} gave {self.codes.get(name, 'nothing')}, expected {expected}"
             for name, expected in self.expected.items()
             if self.codes.get(name) != expected
         ]
@@ -308,13 +333,23 @@ class Stack:
         ).strip()
 
     def input_process(self, service: str) -> dict[str, str]:
-        """exe and proxy and certificate variables of a running web_ping.py.
+        """exe and proxy and certificate variables of the running web_ping.py.
 
-        Stanzas at 15 seconds include hang, which runs 5 seconds, so one is caught
-        within 40 seconds.
+        The input is one long-running process; the 40 seconds cover a splunkd that
+        is still starting it.
         """
         output = self.exec(service, INPUT_PROCESS_SCRIPT, timeout=60)
         return dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
+
+    def input_pids(self, service: str) -> list[int]:
+        """Process ids of the web_ping.py interpreters running now."""
+        output = self.exec(service, INPUT_PIDS_SCRIPT)
+        return sorted(int(word) for word in output.split() if word.isdigit())
+
+    def app_log(self, service: str) -> list[tuple[float, str]]:
+        """website_ping.log and its rotated copies, see parse_app_log."""
+        output = self.exec(service, f"cat {APP_LOG}* 2>/dev/null || true\n")
+        return parse_app_log(output)
 
     def target_log(self) -> list[dict[str, object]]:
         """The target's JSON log lines after the most recent mark."""

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import configparser
-from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -179,19 +178,6 @@ def test_interval_trailing_text_ignored_with_warning() -> None:
     assert settings["interval"] == 900
     assert len(warnings) == 1
     assert "garbage" in warnings[0]
-
-
-@pytest.mark.parametrize(
-    ("params", "seconds"),
-    [({}, 0), ({"interval": ""}, 0), ({"interval": "*/5 * * * *"}, 0),
-     ({"interval": "15M"}, 0), ({"interval": "15m"}, 900)],
-)  # fmt: skip
-def test_interval_not_required(params: Mapping[str, str], seconds: int) -> None:
-    settings, warnings = build_settings(
-        STANZA, {"url": URL, **params}, require_interval=False
-    )
-    assert settings["interval"] == seconds
-    assert warnings == []
 
 
 # ---- timeout ---------------------------------------------------------------

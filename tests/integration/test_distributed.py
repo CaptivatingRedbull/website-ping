@@ -9,7 +9,7 @@ from wptest import install
 from wptest.contract import Scenario, compare, describe
 from wptest.evidence import Evidence
 from wptest.install import APP, CONFIG_APP, DEPLOYMENT_APPS, Package
-from wptest.splunk_rest import events_query
+from wptest.splunk_rest import error_lines_query, events_query
 from wptest.stack import SPLUNK, Stack
 from wptest.wait import INDEXED, SEARCH_HEAD, wait_for
 
@@ -54,10 +54,14 @@ def events_since(stack: Stack, since: float) -> list[dict[str, str]]:
 
 
 def app_errors_since(stack: Stack, since: float) -> list[dict[str, str]]:
-    """ERROR lines about the input in the forwarder's splunkd.log, on the indexer."""
+    """ERROR lines of the forwarder's input, on the indexer: its own log file, and
+    splunkd.log lines naming web_ping (a failing script start shows only there)."""
     return stack.searcher("idx").search(
-        "search index=_internal host=hf source=*splunkd.log* log_level=ERROR"
-        f' "web_ping" earliest={int(since)} | table _time _raw'
+        error_lines_query(
+            f"host=hf earliest={int(since)}"
+            ' ((source=*splunkd.log* log_level=ERROR "web_ping")'
+            " OR source=*website_ping.log*)"
+        )
     )
 
 

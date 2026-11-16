@@ -19,27 +19,27 @@ def scheme_args() -> dict[str, ET.Element]:
     return {arg.get("name", ""): arg for arg in root.iter("arg")}
 
 
-def test_scheme_is_multi_instance_and_valid_xml() -> None:
+def test_scheme_is_single_instance_and_valid_xml() -> None:
     root = ET.fromstring(scheme_xml())
-    assert root.findtext("use_single_instance") == "false"
+    assert root.findtext("use_single_instance") == "true"
     assert root.findtext("streaming_mode") == "xml"
 
 
-def test_interval_not_declared_in_scheme() -> None:
-    assert "interval" not in scheme_args()
+def test_interval_declared_in_scheme() -> None:
+    assert "interval" in scheme_args()
 
 
-def test_only_url_required() -> None:
+def test_url_and_interval_required() -> None:
     required = {
         name
         for name, arg in scheme_args().items()
         if arg.findtext("required_on_create") == "true"
     }
-    assert required == {"url"}
+    assert required == {"url", "interval"}
 
 
-def test_spec_covers_every_scheme_arg_and_interval() -> None:
-    assert spec_keys() == {name for name, _, _ in SCHEME_ARGS} | {"interval"}
+def test_spec_covers_every_scheme_arg() -> None:
+    assert spec_keys() == {name for name, _, _ in SCHEME_ARGS}
 
 
 def test_every_website_monitoring_key_declared() -> None:

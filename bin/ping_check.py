@@ -10,8 +10,9 @@ from dataclasses import dataclass
 from typing import IO, cast
 
 from compat import override
-from logger import log
+from logger import stanza_logger
 from ping_config import UNLIMITED_REDIRECTS, Settings
+from wp_deadline import Deadline
 
 CHUNK_SIZE = 64 * 1024
 MAX_ERROR_LENGTH = 200
@@ -80,7 +81,7 @@ class LimitedRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _drain(response: IO[bytes], deadline: float) -> bool:
+def _drain(response: IO[bytes], deadline: Deadline) -> bool:
     """Read and discard the body. False if the deadline passed or a read timed out."""
     while True:
         try:
@@ -89,7 +90,7 @@ def _drain(response: IO[bytes], deadline: float) -> bool:
             return False
         if not chunk:
             return True
-        if time.monotonic() > deadline:
+        if deadline.passed():
             return False
 
 
@@ -97,7 +98,7 @@ def _fetch(
     opener: urllib.request.OpenerDirector,
     request: urllib.request.Request,
     timeout: int,
-    deadline: float,
+    deadline: Deadline,
 ) -> tuple[int, bool]:
     """Return (status code, body completely read). Transport errors propagate."""
     try:
@@ -120,7 +121,10 @@ def _describe(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"[:MAX_ERROR_LENGTH]
 
 
-def check_url(settings: Settings) -> CheckResult:
+def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResult:
+    """Run one check. The body is not read further once deadline has passed or
+    was expired; by default the deadline is the stanza's timeout from now."""
+    slog = stanza_logger(settings["stanza"], settings["log_level"])
     max_redirects = settings["max_redirects"]
     if max_redirects is None:
         max_redirects = UNLIMITED_REDIRECTS
@@ -132,7 +136,8 @@ def check_url(settings: Settings) -> CheckResult:
     )
     timeout = settings["timeout"]
     start = time.monotonic()
-    deadline = start + timeout
+    if deadline is None:
+        deadline = Deadline(start + timeout)
 
     def result(
         code: int | None,
@@ -162,10 +167,10 @@ def check_url(settings: Settings) -> CheckResult:
             return result(None, timed_out=True)
         return result(None, error=_describe(exc))
     except Exception as exc:  # noqa: BLE001 - last resort, a check must always produce an event
-        log.exception("unexpected error during check")
+        slog.exception("unexpected error during check")
         return result(None, error="unexpected " + _describe(exc))
     if not complete:
-        log.info("status %d arrived, but the body did not within the timeout", code)
+        slog.info("status %d arrived, but the body did not within the timeout", code)
         return result(None, timed_out=True)
     if redirects.limit_reached and 300 <= code < 400:
         return result(

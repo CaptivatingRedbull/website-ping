@@ -164,20 +164,14 @@ def _parse_url(stanza: str, raw: str) -> str:
     return url
 
 
-def _parse_interval(raw: str, required: bool, warnings: list[str]) -> int:
+def _parse_interval(raw: str, warnings: list[str]) -> int:
     if not raw.strip():
-        if required:
-            raise ConfigError("interval is required")
-        return 0
-    try:
-        seconds, ignored = parse_duration("interval", raw)
-    except ConfigError:
-        if required:
-            raise
-        return 0
+        raise ConfigError("interval is required")
+    seconds, ignored = parse_duration("interval", raw)
     if ignored:
         warnings.append(
-            f"interval {raw!r}: text after the unit is ignored ({ignored!r})"
+            "log_level {raw!r} is not one of {', '.join(LOG_LEVELS)},"
+            f" using {DEFAULT_LOG_LEVEL}"
         )
     return seconds
 
@@ -198,22 +192,20 @@ def _parse_log_level(raw: str, warnings: list[str]) -> str:
         return DEFAULT_LOG_LEVEL
     if level not in LOG_LEVELS:
         warnings.append(
-            f"log_level {raw!r} is not one of {', '.join(LOG_LEVELS)},"
-            f" using {DEFAULT_LOG_LEVEL}"
+            f"log_level {raw!r} is not one of {', '.join(LOG_LEVELS)}, using {DEFAULT_LOG_LEVEL}"
         )
         return DEFAULT_LOG_LEVEL
     return level
 
 
 def build_settings(
-    stanza: str, params: Mapping[str, str], *, require_interval: bool = True
+    stanza: str, params: Mapping[str, str]
 ) -> tuple[Settings, list[str]]:
     """Validate the raw stanza params and apply defaults.
 
     Returns the settings and warnings for the caller to log. Raises ConfigError for a
     value that makes the stanza unusable; the message never contains a password.
-    Unknown keys are ignored. With require_interval=False a missing or unparsable
-    interval becomes 0 (splunkd schedules the input itself).
+    Unknown keys are ignored.
     """
     warnings: list[str] = []
     if _text(params, "password"):
@@ -228,9 +220,7 @@ def build_settings(
         "name": stanza.split("://", 1)[-1],
         "url": url,
         "title": _text(params, "title") or url,
-        "interval": _parse_interval(
-            params.get("interval", ""), require_interval, warnings
-        ),
+        "interval": _parse_interval(params.get("interval", ""), warnings),
         "timeout": _parse_timeout(params.get("timeout", ""), warnings),
         "max_redirects": parse_optional_int(
             "max_redirects", params.get("max_redirects", "")

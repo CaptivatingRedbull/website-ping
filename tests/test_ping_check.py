@@ -12,6 +12,7 @@ import pytest
 from compat import override
 from ping_check import check_url
 from ping_config import Settings, build_settings
+from wp_deadline import Deadline
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -160,3 +161,10 @@ def test_unexpected_exception_still_gives_a_result(
     r = check_url(make("http://example.invalid/"))
     assert r.response_code is None and not r.timed_out
     assert r.error == "unexpected KeyError: 'x'"
+
+
+def test_expired_deadline_ends_the_body_read(base_url: str) -> None:
+    deadline = Deadline(time.monotonic() + 30)
+    deadline.expire()
+    r = check_url(make(base_url + "/ok"), deadline)
+    assert r.timed_out and r.response_code is None

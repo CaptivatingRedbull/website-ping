@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from wptest.stack import SPLUNK, Stack
+from wptest.stack import CHECKPOINT_DIR, SPLUNK, Stack
 from wptest.versions import Runtime
 from wptest.wait import Stages, wait_for
 
@@ -221,8 +221,14 @@ def splunk_running(stack: Stack, service: str) -> bool:
 
 
 def stop_mark_start(stack: Stack, service: str, mark_from_target: bool) -> float:
-    """Stop Splunk, mark the target log, start Splunk. Returns the mark time."""
+    """Stop Splunk, mark the target log, start Splunk. Returns the mark time.
+
+    The input's checkpoints are removed while Splunk is stopped: inputs that ran
+    before the mark (after the app install) would otherwise not be due again, and
+    a stanza checked once an hour would have no event after the mark.
+    """
     stack.splunk(service, "stop", timeout=RESTART_TIMEOUT)
+    stack.exec(service, f"rm -rf {CHECKPOINT_DIR}\n")
     mark = time.time()
     if mark_from_target:
         stack.exec(service, "curl --noproxy '*' -fsS http://target:8080/__reset\n")

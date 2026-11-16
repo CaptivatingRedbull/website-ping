@@ -58,6 +58,19 @@ def events_query(title: str, since: float, extra: str = "") -> str:
     )
 
 
+def error_lines_query(where: str) -> str:
+    """ERROR lines in _internal that match the search clause where.
+
+    website_ping.log and splunkd.log both have the level as the fourth word
+    (after date, time and UTC offset).
+    """
+    return (
+        f"search index=_internal {where}"
+        r' | rex "^\S+ \S+ \S+ (?<wptest_level>[A-Z]+) "'
+        ' | where wptest_level="ERROR" | table _time _raw'
+    )
+
+
 class Searcher(Protocol):
     last_result: str
 
