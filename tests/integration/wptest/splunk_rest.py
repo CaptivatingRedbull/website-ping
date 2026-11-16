@@ -44,15 +44,15 @@ def parse_results(text: str) -> list[dict[str, str]]:
 
 
 EVENT_FIELDS = (
-    "wptest_time title url response_code total_time timed_out error"
-    " sourcetype index source host _raw"
+    "wptest_time title url response_code total_time request_time timed_out"
+    " exceeded_redirects error sourcetype index source host _raw"
 )
 
 
 def events_query(title: str, since: float, extra: str = "") -> str:
     """Events of one stanza indexed since the mark, newest first."""
     return (
-        f'search index=main sourcetype=website-ping title="{title}"'
+        f'search index=main sourcetype=web_ping title="{title}"'
         f" _index_earliest={int(since)} {extra}"
         f" | eval wptest_time=_time | table {EVENT_FIELDS}"
     )

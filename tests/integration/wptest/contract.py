@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-SOURCETYPE = "website-ping"
+SOURCETYPE = "web_ping"
 INDEX = "main"
 TIME_SLACK = 60.0
 
@@ -28,13 +29,17 @@ class Scenario:
     title: str
     url: str
     interval: int
-    response_code: int
-    timed_out: int
+    response_code: int | None
+    """None: no complete response, the event has response_code="" and empty times."""
+    timed_out: bool
     error: str | None = None
     """A key of ERROR_PATTERNS, or None for "absent"."""
     settings: Mapping[str, str] = field(default_factory=dict[str, str])
     requests: int | None = None
-    max_total_time: float | None = None
+    max_duration: float | None = None
+    """Seconds the check may take: total_time for a response, otherwise from the
+    target's log of the check's request to the event's _time (the check's end)."""
+    exceeded_redirects: bool = False
 
     @property
     def counted(self) -> bool:
@@ -61,6 +66,18 @@ def _number(value: str | None) -> float | None:
         return None
 
 
+def _duration(event: Mapping[str, str], request_times: Sequence[float]) -> float | None:
+    """Seconds the check of this event took, or None if it cannot be told."""
+    total_time = _number(event.get("total_time"))
+    if total_time is not None:
+        return total_time / 1000
+    end = _number(event.get("wptest_time"))
+    if end is None:
+        return None
+    starts = [start for start in request_times if start <= end]
+    return end - max(starts) if starts else None
+
+
 def compare(
     scenario: Scenario,
     events: list[dict[str, str]],
@@ -69,8 +86,12 @@ def compare(
     mark: float,
     searched_at: float,
     requests: int | None = None,
+    request_times: Sequence[float] = (),
 ) -> list[FieldDiff]:
-    """Every field that differs from the contract, comparing the newest event."""
+    """Every field that differs from the contract, comparing the newest event.
+
+    request_times are the target's log times of the scenario's requests, needed
+    for max_duration when no response arrived."""
     diffs: list[FieldDiff] = []
     if scenario.counted and len(events) != 1:
         diffs.append(FieldDiff("event count", "exactly 1", str(len(events))))
@@ -84,8 +105,8 @@ def compare(
             diffs.append(
                 FieldDiff(
                     name,
-                    "absent" if expected is None else expected,
-                    "absent" if actual is None else actual,
+                    "absent" if expected is None else json.dumps(expected),
+                    "absent" if actual is None else json.dumps(actual),
                 )
             )
 
@@ -95,8 +116,22 @@ def compare(
     expect("host", host)
     expect("title", scenario.title)
     expect("url", scenario.url)
-    expect("response_code", str(scenario.response_code))
     expect("timed_out", str(scenario.timed_out))
+    expect("exceeded_redirects", "True" if scenario.exceeded_redirects else None)
+
+    if scenario.response_code is None:
+        for name in ("response_code", "total_time", "request_time"):
+            expect(name, "")
+    else:
+        expect("response_code", str(scenario.response_code))
+        total_time = _number(event.get("total_time"))
+        if total_time is None or total_time < 0:
+            diffs.append(
+                FieldDiff(
+                    "total_time", "a non-negative number", str(event.get("total_time"))
+                )
+            )
+        expect("request_time", event.get("total_time"))
 
     error = event.get("error")
     if scenario.error is None:
@@ -110,17 +145,17 @@ def compare(
             )
         )
 
-    total_time = _number(event.get("total_time"))
-    limit = scenario.max_total_time
-    if (
-        total_time is None
-        or total_time < 0
-        or (limit is not None and total_time > limit)
-    ):
-        expected = (
-            f"at most {limit:g}" if limit is not None else "a non-negative number"
-        )
-        diffs.append(FieldDiff("total_time", expected, str(event.get("total_time"))))
+    limit = scenario.max_duration
+    if limit is not None:
+        duration = _duration(event, request_times)
+        if duration is None or duration > limit:
+            diffs.append(
+                FieldDiff(
+                    "duration",
+                    f"at most {limit:g} s",
+                    "unknown" if duration is None else f"{duration:.1f} s",
+                )
+            )
 
     event_time = _number(event.get("wptest_time"))
     if event_time is None or not mark <= event_time <= searched_at + TIME_SLACK:

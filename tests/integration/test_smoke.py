@@ -40,7 +40,7 @@ def test_btool_shows_app_defaults(standalone: Stack) -> None:
         for line in output.splitlines()
         if line.startswith(APP_INPUTS)
     }
-    for setting in ("sourcetype = website-ping", "interval = 300"):
+    for setting in ("sourcetype = web_ping", "interval = 300"):
         assert setting in from_app, f"{setting!r} not set by the app:\n{output}"
     # Code defaults apply; a default here would replace the unlimited redirects.
     for key in ("timeout", "max_redirects", "user_agent"):
@@ -88,7 +88,7 @@ def test_bad_config_logs_error_and_writes_no_event(standalone: Stack) -> None:
     )
     assert errors
     events = searcher.search(
-        'search index=main sourcetype=website-ping source="web_ping://bad-config"'
+        'search index=main sourcetype=web_ping source="web_ping://bad-config"'
         f" _index_earliest={int(standalone.mark)}"
     )
     assert events == []
@@ -112,7 +112,7 @@ def test_default_settings_inherited(standalone: Stack) -> None:
         standalone.stages,
         interval=15,
     )
-    assert {event["sourcetype"] for event in events} == {"website-ping"}
+    assert {event["sourcetype"] for event in events} == {"web_ping"}
     times = sorted(float(event["wptest_time"]) for event in events)
     assert abs(times[1] - times[0] - 300) <= 30, (
         f"events {times[1] - times[0]:.0f} s apart"

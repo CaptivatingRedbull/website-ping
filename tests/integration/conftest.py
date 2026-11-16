@@ -43,8 +43,9 @@ TOPOLOGY_OF_MARKER = {
     "distributed": "distributed",
     "spike": "spike",
     "golden": "golden",
+    "parity": "parity",
 }
-TOPOLOGY_ORDER = ("standalone", "noroute", "spike", "golden", "distributed")
+TOPOLOGY_ORDER = ("standalone", "parity", "noroute", "spike", "golden", "distributed")
 OPT_IN_MARKERS = ("spike", "golden")
 OWN_INTERPRETER_MARKERS = ("spike", "golden")
 """Tests of apps that are not website-ping and choose their interpreter themselves."""
@@ -530,12 +531,37 @@ def setup_golden(stack: Stack, manager: StackManager) -> None:
     install.wait_registered(stack, "so1", "status-200", stack.stages)
 
 
+def setup_parity(stack: Stack, manager: StackManager) -> None:
+    """Standalone compose file with website-ping and the parity scenarios it can
+    already match, generated from wptest/parity.py."""
+    _start(stack, manager)
+    _deliver_helpers(stack, manager, ("so1",))
+    _probe(stack, manager, ("so1",))
+    archive = install.build_config_app(
+        APPS_DIR / "parity",
+        manager.workdir / f"website_ping_inputs-parity-{stack.runtime.id}.tar.gz",
+        extra={
+            "default/inputs.conf": parity.inputs_conf(parity.compared_scenarios()),
+            **install.python_override(stack.runtime),
+        },
+    )
+    install.install_single(stack, "so1", manager.package, archive, True)
+    install.wait_registered(stack, "so1", "status-200", stack.stages)
+    wait_for(
+        STARTED,
+        lambda: True if stack.target_log() else None,
+        EVENT_TIMEOUT,
+        stack.stages,
+    )
+
+
 SETUPS: dict[str, Callable[[Stack, StackManager], None]] = {
     "standalone": setup_standalone,
     "noroute": setup_noroute,
     "distributed": setup_distributed,
     "spike": setup_spike,
     "golden": setup_golden,
+    "parity": setup_parity,
 }
 
 
@@ -663,6 +689,11 @@ def golden_stack(stacks: StackManager, runtime: Runtime) -> Stack:
             f"Website Monitoring 2.9.7 is captured on {legacy.LEGACY_LINE} only"
         )
     return stacks.get(runtime, "golden")
+
+
+@pytest.fixture
+def parity_stack(stacks: StackManager, runtime: Runtime) -> Stack:
+    return stacks.get(runtime, "parity")
 
 
 @pytest.fixture

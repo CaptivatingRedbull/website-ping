@@ -145,3 +145,18 @@ def test_international_urls_survive_the_conf_file() -> None:
     )
     assert parser["web_ping://host-set"]["host"] == "wptest-host"
     assert parser["web_ping://date-in-title"]["title"] == "2020-01-02T03:04:05 check"
+
+
+def test_pending_names_known_scenarios_and_a_missing_feature() -> None:
+    titles = {s.title for s in PARITY_SCENARIOS}
+    assert set(parity.PENDING) <= titles
+    for title, reason in parity.PENDING.items():
+        assert reason.startswith("needs "), title
+
+
+def test_compared_scenarios_leave_out_pending_ones() -> None:
+    compared = {s.title for s in parity.compared_scenarios()}
+    assert compared.isdisjoint(parity.PENDING)
+    assert compared | set(parity.PENDING) == {s.title for s in PARITY_SCENARIOS}
+    stanzas = parse(parity.inputs_conf(parity.compared_scenarios())).sections()
+    assert stanzas == [f"web_ping://{s.title}" for s in parity.compared_scenarios()]

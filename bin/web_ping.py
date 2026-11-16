@@ -6,9 +6,10 @@ from collections.abc import Sequence
 from xml.sax.saxutils import escape
 
 from logger import log, setup_logging
-from ping_check import check_url, event_fields
+from ping_check import check_url
 from ping_config import ConfigError, build_settings
 from ping_events import write_event
+from wp_event_fields import check_event
 from wp_version import runtime_versions
 
 SCHEME_ARGS: tuple[tuple[str, str, str], ...] = (
@@ -94,14 +95,14 @@ def ping() -> None:
     log.info("starting check url=%s %s", settings["url"], runtime_versions())
     result = check_url(settings)
     log.info(
-        "check done code=%d time=%.3f timed_out=%s",
+        "check done code=%s time=%.3f timed_out=%s",
         result.response_code,
-        result.total_time,
+        result.elapsed,
         result.timed_out,
     )
     if result.error:
         log.warning("check failed: %s", result.error)
-    write_event(event_fields(settings, result))
+    write_event(check_event(settings, result))
 
 
 def main(argv: Sequence[str]) -> int:

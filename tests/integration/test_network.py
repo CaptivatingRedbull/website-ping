@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import configparser
 import time
+from urllib.parse import urlsplit
 
 import pytest
 from wptest.contract import Scenario, compare, describe
@@ -22,44 +23,46 @@ QUIET_WINDOW = 45
 T = "http://target:8080"
 
 SCENARIOS = [
-    Scenario("status-200", f"{T}/status/200", 15, 200, 0),
-    Scenario("status-404", f"{T}/status/404", 15, 404, 0),
-    Scenario("status-503", f"{T}/status/503", 15, 503, 0),
-    Scenario("chain-at-3", f"{T}/chain/chain-at-3/3", 3600, 200, 0,
+    Scenario("status-200", f"{T}/status/200", 15, 200, False),
+    Scenario("status-404", f"{T}/status/404", 15, 404, False),
+    Scenario("status-503", f"{T}/status/503", 15, 503, False),
+    Scenario("chain-at-3", f"{T}/chain/chain-at-3/3", 3600, 200, False,
              settings={"max_redirects": "3"}, requests=4),
-    Scenario("chain-at-10", f"{T}/chain/chain-at-10/10", 3600, 200, 0, requests=11),
-    Scenario("chain-at-50", f"{T}/chain/chain-at-50/50", 3600, 200, 0,
+    Scenario("chain-at-10", f"{T}/chain/chain-at-10/10", 3600, 200, False, requests=11),
+    Scenario("chain-at-50", f"{T}/chain/chain-at-50/50", 3600, 200, False,
              settings={"max_redirects": "50"}, requests=51),
-    Scenario("repeat-8", f"{T}/repeat/repeat-8/8", 3600, 200, 0,
+    Scenario("repeat-8", f"{T}/repeat/repeat-8/8", 3600, 200, False,
              settings={"max_redirects": "10"}, requests=9),
     *[
         Scenario(f"redirect-{status}", f"{T}/redirect/{status}/redirect-{status}",
-                 3600, 200, 0, requests=2)
+                 3600, 200, False, requests=2)
         for status in (301, 302, 303, 307, 308)
     ],
-    Scenario("over-3", f"{T}/chain/over-3/4", 3600, 302, 0, "Redirect limit",
-             settings={"max_redirects": "3"}, requests=4),
-    Scenario("over-10", f"{T}/chain/over-10/11", 3600, 302, 0, "Redirect limit",
-             settings={"max_redirects": "10"}, requests=11),
-    Scenario("over-50", f"{T}/chain/over-50/51", 3600, 302, 0, "Redirect limit",
-             settings={"max_redirects": "50"}, requests=51),
-    Scenario("loop", f"{T}/loop/loop", 3600, 302, 0, "Redirect limit",
-             settings={"max_redirects": "10"}, requests=11),
-    Scenario("redirects-off", f"{T}/redirect/302/redirects-off", 3600, 302, 0,
-             "Redirect limit", settings={"max_redirects": "0"}, requests=1),
-    Scenario("refused", "http://target:8090/", 15, 0, 0, "ConnectionRefusedError"),
-    Scenario("hang", "http://target:8081/", 15, 0, 1,
-             settings={"timeout": "5"}, max_total_time=7),
-    Scenario("slow-body", f"{T}/slow-body/slow-body", 3600, 200, 1,
-             settings={"timeout": "5"}, max_total_time=7),
-    Scenario("trickled-body", f"{T}/trickle/trickled-body", 3600, 200, 1,
-             settings={"timeout": "5"}, max_total_time=7),
-    Scenario("dns-failure", "http://wptest.invalid/", 15, 0, 0, "gaierror"),
-    Scenario("tls-valid", "https://target:8443/", 15, 200, 0),
-    Scenario("tls-expired", "https://target:8444/", 15, 0, 0, "Expired certificate"),
-    Scenario("tls-self-signed", "https://target:8445/", 15, 0, 0, "Self-signed certificate"),
-    Scenario("tls-wrong-host", "https://target:8446/", 15, 0, 0, "Wrong hostname"),
-    Scenario("proxy-ignored", f"{T}/status/200", 15, 200, 0,
+    Scenario("over-3", f"{T}/chain/over-3/4", 3600, None, False, "Redirect limit",
+             settings={"max_redirects": "3"}, requests=4, exceeded_redirects=True),
+    Scenario("over-10", f"{T}/chain/over-10/11", 3600, None, False, "Redirect limit",
+             settings={"max_redirects": "10"}, requests=11, exceeded_redirects=True),
+    Scenario("over-50", f"{T}/chain/over-50/51", 3600, None, False, "Redirect limit",
+             settings={"max_redirects": "50"}, requests=51, exceeded_redirects=True),
+    Scenario("loop", f"{T}/loop/loop", 3600, None, False, "Redirect limit",
+             settings={"max_redirects": "10"}, requests=11, exceeded_redirects=True),
+    Scenario("redirects-off", f"{T}/redirect/302/redirects-off", 3600, None, False,
+             "Redirect limit", settings={"max_redirects": "0"}, requests=1,
+             exceeded_redirects=True),
+    Scenario("refused", "http://target:8090/", 15, None, False, "ConnectionRefusedError"),
+    Scenario("hang", "http://target:8081/", 15, None, True,
+             settings={"timeout": "5"}, max_duration=7),
+    Scenario("slow-body", f"{T}/slow-body/slow-body", 3600, None, True,
+             settings={"timeout": "5"}, max_duration=7),
+    Scenario("trickled-body", f"{T}/trickle/trickled-body", 3600, None, True,
+             settings={"timeout": "5"}, max_duration=7),
+    Scenario("dns-failure", "http://wptest.invalid/", 15, None, False, "gaierror"),
+    Scenario("tls-valid", "https://target:8443/", 15, 200, False),
+    Scenario("tls-expired", "https://target:8444/", 15, None, False, "Expired certificate"),
+    Scenario("tls-self-signed", "https://target:8445/", 15, None, False,
+             "Self-signed certificate"),
+    Scenario("tls-wrong-host", "https://target:8446/", 15, None, False, "Wrong hostname"),
+    Scenario("proxy-ignored", f"{T}/status/200", 15, 200, False,
              settings={"user_agent": "wptest-proxy-ignored"}),
 ]  # fmt: skip
 
@@ -72,6 +75,20 @@ def wait_for_events(stack: Stack, title: str) -> list[dict[str, str]]:
         EVENT_TIMEOUT,
         stack.stages,
     )
+
+
+def request_times(stack: Stack, scenario: Scenario) -> list[float]:
+    """Log times of the target requests on the scenario's port whose path has the
+    title as one segment or is the URL's path (the silent port logs an empty path)."""
+    url = urlsplit(scenario.url)
+    times: list[float] = []
+    for record in stack.target_log():
+        path = str(record.get("path", "")).split("?", 1)[0]
+        if int(str(record.get("port", 0))) != url.port:
+            continue
+        if scenario.title in path.split("/") or path in ("", url.path):
+            times.append(float(str(record.get("time", 0))))
+    return times
 
 
 def squid_lines(stack: Stack, user_agent: str) -> int:
@@ -126,6 +143,7 @@ def test_scenario(standalone: Stack, scenario: Scenario, evidence: Evidence) -> 
         check_proxy_ignored(standalone)
     searched_at = time.time()
     requests = standalone.target_requests(scenario.title) if scenario.requests else None
+    times = request_times(standalone, scenario) if scenario.max_duration else []
     diffs = compare(
         scenario,
         events,
@@ -133,6 +151,7 @@ def test_scenario(standalone: Stack, scenario: Scenario, evidence: Evidence) -> 
         mark=standalone.mark,
         searched_at=searched_at,
         requests=requests,
+        request_times=times,
     )
     evidence.note(
         f"{standalone.project}.scenario.{scenario.title}", [str(diff) for diff in diffs]

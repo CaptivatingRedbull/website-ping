@@ -34,8 +34,9 @@ any container starts.
 
 ```sh
 export WPTEST_ACCEPT_SPLUNK_TERMS=yes
-pytest tests/integration -m "single or network"   # standalone stack, 9.4/3.9 and 10.6/3.13
-pytest tests/integration -m "single or network" --python all   # adds 10.6/3.9 (release)
+pytest tests/integration -m "single or network or parity"   # standalone and parity stacks, 9.4/3.9 and 10.6/3.13
+pytest tests/integration -m "single or network or parity" --python all   # adds 10.6/3.9 (release)
+pytest tests/integration -m parity                 # parity stack only
 pytest tests/integration -m no_route               # no-route stack
 pytest tests/integration -m distributed            # distributed stack
 pytest tests/integration -m release                # AppInspect on the tarball
@@ -61,6 +62,12 @@ Options:
 
 A standalone stack takes about 7 minutes per line, the no-route stack about
 2 minutes and the distributed stack about 10 minutes.
+The parity stack (`-m parity`) runs website-ping with the scenarios of
+`wptest/parity.py` and compares each newest check event with the golden event
+of Website Monitoring 2.9.7 in `tests/golden/2.9.7/` (`wptest/golden.py`,
+allowed differences in `ALLOWED_DIFFERENCES`). Scenarios in `parity.PENDING`
+need a feature website-ping does not have yet: they are skipped with that
+feature as the reason and left out of the stack's config.
 
 ## Isolation rules
 

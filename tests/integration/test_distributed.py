@@ -25,7 +25,7 @@ DIST_CHECK = Scenario(
     "http://target:8080/status/200",
     15,
     200,
-    0,
+    False,
     settings={"timeout": "5", "disabled": "0"},
 )
 

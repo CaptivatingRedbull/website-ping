@@ -80,17 +80,17 @@ Wait about a minute after the restart, then:
 
 ```sh
 docker exec -u splunk -e SPLUNK_USERNAME=admin wptest-realnet /opt/splunk/bin/splunk search \
-  'index=main sourcetype=website-ping title=realnet-* | table title response_code timed_out error total_time' \
+  'index=main sourcetype=web_ping title=realnet-* | table title response_code timed_out error total_time' \
   -earliest_time -15m
 ```
 
 | Stanza | Expected |
 | --- | --- |
-| `realnet-valid` | `response_code=200`, `timed_out=0`, no `error`. Verification passes. |
+| `realnet-valid` | `response_code=200`, `timed_out=False`, no `error`. Verification passes. |
 | `realnet-expired` | `response_code=0`, `error` matches `^SSLCertVerificationError: .*certificate has expired` |
 | `realnet-self-signed` | `response_code=0`, `error` matches `^SSLCertVerificationError: .*self[- ]signed certificate` |
 | `realnet-wrong-host` | `response_code=0`, `error` matches `^SSLCertVerificationError: .*Hostname mismatch` |
-| `realnet-blocked` | `response_code=0`, `timed_out=1`. The firewall rule drops it silently and nothing listens on that port. |
+| `realnet-blocked` | `response_code=0`, `timed_out=True`. The firewall rule drops it silently and nothing listens on that port. |
 
 The three certificate rows cannot pass until the app verifies certificates
 inside Splunk (see `expected_failures.md`). A release requires them to pass.

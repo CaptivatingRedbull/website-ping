@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import http.client
 import socket
 import time
@@ -11,18 +12,47 @@ from typing import IO, cast
 from compat import override
 from logger import log
 from ping_config import UNLIMITED_REDIRECTS, Settings
-from ping_events import FieldValue
 
 CHUNK_SIZE = 64 * 1024
 MAX_ERROR_LENGTH = 200
 
 
 @dataclass(frozen=True)
+class ProxyInfo:
+    """The proxy settings an event reports, as written in website_monitoring.conf."""
+
+    server: str = ""
+    type: str = "http"
+    port: str = ""
+    user: str = ""
+
+
+NO_PROXY = ProxyInfo()
+"""What Website Monitoring reported when no proxy was configured."""
+
+
+@dataclass(frozen=True)
 class CheckResult:
-    response_code: int
-    total_time: float
+    """The outcome of one check. response_code is None when no complete response
+    arrived (timeout, connection or TLS failure, redirect limit)."""
+
+    response_code: int | None
+    elapsed: float
+    """Seconds from the start of the request until the body was read."""
+    finished: float
+    """Wall-clock time (epoch seconds) when the check ended."""
     timed_out: bool = False
     error: str = ""
+    exceeded_redirects: bool = False
+    headers: tuple[tuple[str, str], ...] | None = None
+    """Response headers in the order received, when return_headers is set."""
+    content_md5: str | None = None
+    content_sha224: str | None = None
+    content_size: int | None = None
+    has_expected_string: bool | None = None
+    proxy: ProxyInfo = NO_PROXY
+    body: str | None = None
+    """Response body for the body event, when return_body is set."""
 
 
 class LimitedRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -79,6 +109,13 @@ def _fetch(
             return exc.code, _drain(exc, deadline)
 
 
+def _is_timeout(reason: object) -> bool:
+    """A socket timeout, or a connect that the kernel gave up on (ETIMEDOUT)."""
+    if isinstance(reason, (socket.timeout, TimeoutError)):
+        return True
+    return isinstance(reason, OSError) and reason.errno == errno.ETIMEDOUT
+
+
 def _describe(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"[:MAX_ERROR_LENGTH]
 
@@ -97,38 +134,43 @@ def check_url(settings: Settings) -> CheckResult:
     start = time.monotonic()
     deadline = start + timeout
 
-    def result(code: int, timed_out: bool = False, error: str = "") -> CheckResult:
-        return CheckResult(code, round(time.monotonic() - start, 3), timed_out, error)
+    def result(
+        code: int | None,
+        *,
+        timed_out: bool = False,
+        error: str = "",
+        exceeded_redirects: bool = False,
+    ) -> CheckResult:
+        return CheckResult(
+            response_code=code,
+            elapsed=time.monotonic() - start,
+            finished=time.time(),
+            timed_out=timed_out,
+            error=error,
+            exceeded_redirects=exceeded_redirects,
+        )
 
     try:
         code, complete = _fetch(opener, request, timeout, deadline)
-    except (socket.timeout, TimeoutError):
-        return result(0, timed_out=True)
     except urllib.error.URLError as exc:
-        if isinstance(exc.reason, (socket.timeout, TimeoutError)):
-            return result(0, timed_out=True)
+        if _is_timeout(exc.reason):
+            return result(None, timed_out=True)
         detail = exc.reason if isinstance(exc.reason, BaseException) else exc
-        return result(0, error=_describe(detail))
+        return result(None, error=_describe(detail))
     except (OSError, http.client.HTTPException) as exc:
-        return result(0, error=_describe(exc))
+        if _is_timeout(exc):
+            return result(None, timed_out=True)
+        return result(None, error=_describe(exc))
     except Exception as exc:  # noqa: BLE001 - last resort, a check must always produce an event
         log.exception("unexpected error during check")
-        return result(0, error="unexpected " + _describe(exc))
+        return result(None, error="unexpected " + _describe(exc))
     if not complete:
-        return result(code, timed_out=True)
-    if redirects.limit_reached and 300 <= code <= 400:
-        return result(code, error=f"redirect limit of {max_redirects} reached")
+        log.info("status %d arrived, but the body did not within the timeout", code)
+        return result(None, timed_out=True)
+    if redirects.limit_reached and 300 <= code < 400:
+        return result(
+            None,
+            exceeded_redirects=True,
+            error=f"redirect limit of {max_redirects} reached",
+        )
     return result(code)
-
-
-def event_fields(settings: Settings, result: CheckResult) -> dict[str, FieldValue]:
-    fields: dict[str, FieldValue] = {
-        "title": settings["title"],
-        "url": settings["url"],
-        "response_code": result.response_code,
-        "total_time": result.total_time,
-        "timed_out": result.timed_out,
-    }
-    if result.error:
-        fields["error"] = result.error
-    return fields

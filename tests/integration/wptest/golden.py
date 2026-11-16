@@ -36,11 +36,22 @@ NEAR_INDEX_TIME = 600.0
 """An event _time this close to _indextime was assigned at arrival, so it is volatile.
 A _time further away was extracted from the event and is kept (see normalise_time)"""
 ANY_FIELD = "*"
+UNSET_HOST = "$decideOnStartup"
+"""The host splunkd passes to an input whose stanza sets none; 2.9.7 wrote it as is."""
+INPUT_TIME = "event time set by the input instead of extracted from the text"
+CONTENT_PENDING = "needs content checks"
 
 ALLOWED_DIFFERENCES: Mapping[str, Mapping[str, str]] = {
     # title -> {field -> reason}; "*" as title applies to every scenario,
     # "*" as field allows every field of that scenario.
-    "*": {"error": "new in website-ping (additive)"},
+    "*": {
+        "error": "new in website-ping (additive)",
+        "content_md5": CONTENT_PENDING,
+        "content_sha224": CONTENT_PENDING,
+        "content_size": CONTENT_PENDING,
+    },
+    "date-in-title": {"_time": INPUT_TIME, "timestamp": INPUT_TIME},
+    "body-lines": {"_time": INPUT_TIME, "timestamp": INPUT_TIME},
     "slow-body": {ANY_FIELD: "timeout is a total deadline in website-ping"},
     "trickled-body": {ANY_FIELD: "timeout is a total deadline in website-ping"},
     "ntlm-offered": {ANY_FIELD: "NTLM not supported in website-ping"},
@@ -51,7 +62,7 @@ ALLOWED_DIFFERENCES: Mapping[str, Mapping[str, str]] = {
 EXPORT_FIELDS = "wptest_raw wptest_time wptest_indextime wptest_cd wptest_server"
 EXPORT_QUERY = (
     'search index=main (sourcetype=web_ping OR sourcetype="web_ping:response")'
-    ' source="web_ping://*" _index_earliest={since}'
+    ' source="web_ping://{title}" _index_earliest={since}'
     " | eval wptest_raw=_raw, wptest_time=_time, wptest_indextime=_indextime,"
     " wptest_cd=_cd, wptest_server=splunk_server"
     " | sort 0 _time sourcetype"
@@ -60,8 +71,9 @@ EXPORT_QUERY = (
 )
 
 
-def export_query(since: float) -> str:
-    return EXPORT_QUERY.format(since=int(since))
+def export_query(since: float, title: str = "*") -> str:
+    """Events indexed since the mark, of one stanza or (by default) all."""
+    return EXPORT_QUERY.format(since=int(since), title=title)
 
 
 # ---- _raw ------------------------------------------------------------------
@@ -431,6 +443,15 @@ def read_capture(folder: Path, title: str) -> Capture:
 def allowed_fields(title: str) -> dict[str, str]:
     """Field -> reason for the differences allowed on one scenario."""
     return {**ALLOWED_DIFFERENCES.get("*", {}), **ALLOWED_DIFFERENCES.get(title, {})}
+
+
+def parity_allowed(title: str, expected: GoldenEvent) -> dict[str, str]:
+    """allowed_fields, plus host where 2.9.7 wrote the unset placeholder: website-ping
+    leaves the host to splunkd then."""
+    allowed = allowed_fields(title)
+    if _single(expected.fields.get("host", "")) == UNSET_HOST:
+        allowed["host"] = "splunkd names the host when the stanza sets none"
+    return allowed
 
 
 def _show(value: FieldValue | None) -> str:

@@ -206,6 +206,56 @@ CONF_STANZAS: Mapping[str, Mapping[str, str]] = MappingProxyType(
         ),
     }
 )
+_REDIRECTS = (
+    "needs redirect handling beyond Python's built-in limits (10 redirects, 4 repeats)"
+)
+_CONTENT = "needs content checks"
+_BODY = "needs the response body event"
+_AUTH = "needs HTTP authentication with passwords from storage/passwords"
+_PROXY = "needs proxy configuration from website_monitoring.conf"
+_URL = "needs URL encoding of spaces and non-ASCII characters"
+
+PENDING: Mapping[str, str] = MappingProxyType(
+    {
+        "interval-units": "needs the input's own scheduler (interval with time units)",
+        **dict.fromkeys(("minus-one-25", "blank-25", "blank-31", "loop"), _REDIRECTS),
+        **dict.fromkeys((f"content-{case}" for case in CONTENT_CASES), _CONTENT),
+        **dict.fromkeys(("match-yes", "match-no"), _CONTENT),
+        **dict.fromkeys(
+            ("gzip", "gzip-forced", "deflate", "deflate-raw"),
+            "needs content checks and gzip/deflate decoding",
+        ),
+        "headers": "needs response headers in the event",
+        **dict.fromkeys(("body-big", "body-small", "body-lines", "body-binary"), _BODY),
+        **dict.fromkeys(
+            (
+                "basic-plain",
+                "basic-secure",
+                "digest-plain",
+                "auth-wrong",
+                "ntlm-offered",
+            ),
+            _AUTH,
+        ),
+        **dict.fromkeys(("mtls-combined", "mtls-split"), "needs client certificates"),
+        **dict.fromkeys(
+            ("proxy-plain", "proxy-https", "proxy-auth", "proxy-ignore"), _PROXY
+        ),
+        "cookie-redirect": "needs cookies kept across redirects",
+        "idn-eszett": "needs IDNA 2008 host names",
+        **dict.fromkeys(("path-unicode", "path-space"), _URL),
+    }
+)
+"""Scenarios website-ping cannot match yet, with the missing feature. They are
+skipped by the parity test and left out of its config app."""
+
+
+def compared_scenarios(
+    scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
+) -> tuple[ParityScenario, ...]:
+    """The scenarios the parity test compares with their fixtures."""
+    return tuple(s for s in scenarios if s.title not in PENDING)
+
 
 INPUTS_HEADER = (
     "# Generated from wptest/parity.py (PARITY_SCENARIOS). Do not edit by hand.\n"

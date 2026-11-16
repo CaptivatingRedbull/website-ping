@@ -192,10 +192,24 @@ def test_sourcetype_difference_is_reported_first() -> None:
 
 
 def test_allowed_fields_merge_global_and_title() -> None:
-    assert golden.allowed_fields("status-200") == {
-        "error": "new in website-ping (additive)"
-    }
+    allowed = golden.allowed_fields("status-200")
+    assert set(allowed) == {"error", "content_md5", "content_sha224", "content_size"}
     assert golden.ANY_FIELD in golden.allowed_fields("ntlm-offered")
+    assert {"_time", "timestamp"} <= set(golden.allowed_fields("date-in-title"))
+
+
+def test_host_allowed_only_where_2_9_7_wrote_the_placeholder() -> None:
+    unset = event("a=1", host="$decideOnStartup")
+    assert "host" in golden.parity_allowed("status-200", unset)
+    named = event("a=1", host="wptest-host")
+    assert "host" not in golden.parity_allowed("host-set", named)
+    assert "host" not in golden.allowed_fields("status-200")
+
+
+def test_export_query_for_one_stanza() -> None:
+    assert 'source="web_ping://*"' in golden.export_query(100.0)
+    query = golden.export_query(100.5, "status-200")
+    assert 'source="web_ping://status-200" _index_earliest=100 ' in query
 
 
 # ---- Captures --------------------------------------------------------------

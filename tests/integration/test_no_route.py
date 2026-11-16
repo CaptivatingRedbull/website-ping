@@ -19,11 +19,10 @@ NO_DIRECT_ROUTE = Scenario(
     "no-direct-route",
     "http://192.0.2.10:8080/",
     3600,
-    0,
-    0,
+    None,
+    False,
     "Unreachable network",
     settings={"timeout": "5"},
-    max_total_time=7,
 )
 
 
