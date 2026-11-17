@@ -170,8 +170,7 @@ def _parse_interval(raw: str, warnings: list[str]) -> int:
     seconds, ignored = parse_duration("interval", raw)
     if ignored:
         warnings.append(
-            "log_level {raw!r} is not one of {', '.join(LOG_LEVELS)},"
-            f" using {DEFAULT_LOG_LEVEL}"
+            f"interval {raw!r}: text after the unit is ignored ({ignored!r})"
         )
     return seconds
 
