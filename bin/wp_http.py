@@ -10,6 +10,7 @@ import sys
 import threading
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from typing import IO
 from urllib.parse import urlsplit
 
@@ -260,14 +261,21 @@ class DeadlineHTTPHandler(urllib.request.HTTPHandler):
 
 
 class DeadlineHTTPSHandler(urllib.request.HTTPSHandler):
+    """HTTPS with the context that context() returns, asked for when the first
+    HTTPS connection of a check opens. An exception from context() ends the
+    check before anything is sent; a plain-HTTP check never calls it."""
+
     def __init__(
-        self, sockets: DeadlineSockets, context: ssl.SSLContext | None = None
+        self, sockets: DeadlineSockets, context: Callable[[], ssl.SSLContext]
     ) -> None:
         super().__init__()
         self.sockets: DeadlineSockets = sockets
-        self.ssl_context: ssl.SSLContext | None = context
+        self.context: Callable[[], ssl.SSLContext] = context
+        self.ssl_context: ssl.SSLContext | None = None
 
     def https_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        if self.ssl_context is None:
+            self.ssl_context = self.context()
         order_headers(req)
         return self.do_open(self._connection, req)
 

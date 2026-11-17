@@ -4,6 +4,7 @@ import errno
 import http.client
 import http.cookiejar
 import socket
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -11,7 +12,7 @@ from dataclasses import dataclass
 from typing import Protocol, cast
 
 from logger import stanza_logger
-from ping_config import UNLIMITED_REDIRECTS, Settings
+from ping_config import DEFAULT_SSL_VERIFY, UNLIMITED_REDIRECTS, Settings
 from wp_content import MAX_BODY_BYTES, BodyDecoder, ContentDecodingError, encoding_of
 from wp_deadline import Deadline
 from wp_http import (
@@ -21,6 +22,7 @@ from wp_http import (
     LimitedRedirectHandler,
     request_headers,
 )
+from wp_tls import CONTEXTS, TLSOptions, TLSSetupError, describe_tls_error
 from wp_url import HostNameError, prepare_url
 
 CHUNK_SIZE = 64 * 1024
@@ -133,7 +135,18 @@ def _timed_out(exc: BaseException) -> bool:
 
 
 def _describe(exc: BaseException) -> str:
-    return f"{type(exc).__name__}: {exc}"[:MAX_ERROR_LENGTH]
+    if isinstance(exc, ssl.SSLError):
+        text = describe_tls_error(exc)
+    else:
+        text = f"{type(exc).__name__}: {exc}"
+    return text[:MAX_ERROR_LENGTH]
+
+
+def tls_options(settings: Settings) -> TLSOptions:
+    verify = settings["ssl_verify"]
+    if verify is None:
+        verify = DEFAULT_SSL_VERIFY
+    return TLSOptions(verify=verify, ca_certs=settings["ca_certs"] if verify else None)
 
 
 def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResult:
@@ -151,11 +164,12 @@ def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResu
         deadline = Deadline(start + timeout)
     sockets = DeadlineSockets(deadline)
     redirects = LimitedRedirectHandler(max_redirects)
+    tls = tls_options(settings)
     # ProxyHandler({}) ignores proxy environment variables (will be implemented later)
     opener = urllib.request.build_opener(
         urllib.request.ProxyHandler({}),
         DeadlineHTTPHandler(sockets),
-        DeadlineHTTPSHandler(sockets),
+        DeadlineHTTPSHandler(sockets, lambda: CONTEXTS.get(tls, slog)),
         redirects,
         # A new jar per check: a cookie set during one check's redirects is sent
         # on its later hops, never by another check or stanza.
@@ -185,6 +199,9 @@ def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResu
             method="GET",
         )
         code, body = _fetch(opener, request, timeout, deadline, sockets)
+    except TLSSetupError as exc:
+        # Raised before the first HTTPS connection opens: nothing was sent.
+        return result(None, error=str(exc)[:MAX_ERROR_LENGTH])
     except Exception as exc:  # noqa: BLE001 - a check must always produce an event
         # After expiry the sockets were shut down under the check: whatever that
         # raised (reset, TLS or protocol error) means the time ran out.

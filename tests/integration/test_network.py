@@ -21,6 +21,10 @@ PROXY = "http://squid:3128"
 PROXY_VARIABLES = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
 QUIET_WINDOW = 45
 T = "http://target:8080"
+HARNESS_CA = "/tmp/wptest-ca.pem"
+VERIFIED = {"ssl_verify": "true", "ca_certs": HARNESS_CA}
+"""Certificate checks against the harness CA. With the default (no checks), the
+TLS targets are covered by the parity scenarios."""
 
 SCENARIOS = [
     Scenario("status-200", f"{T}/status/200", 15, 200, False),
@@ -57,11 +61,21 @@ SCENARIOS = [
     Scenario("trickled-body", f"{T}/trickle/trickled-body", 3600, None, True,
              settings={"timeout": "5"}, max_duration=7),
     Scenario("dns-failure", "http://wptest.invalid/", 15, None, False, "gaierror"),
-    Scenario("tls-valid", "https://target:8443/", 15, 200, False),
-    Scenario("tls-expired", "https://target:8444/", 15, None, False, "Expired certificate"),
+    Scenario("tls-valid", "https://target:8443/", 15, 200, False, settings=VERIFIED),
+    Scenario("tls-expired", "https://target:8444/", 15, None, False, "Expired certificate",
+             settings=VERIFIED),
     Scenario("tls-self-signed", "https://target:8445/", 15, None, False,
-             "Self-signed certificate"),
-    Scenario("tls-wrong-host", "https://target:8446/", 15, None, False, "Wrong hostname"),
+             "Self-signed certificate", settings=VERIFIED),
+    Scenario("tls-wrong-host", "https://target:8446/", 15, None, False, "Wrong hostname",
+             settings=VERIFIED),
+    # SSL_CERT_FILE in the stack points at the harness CA.
+    Scenario("tls-verify-default-store", "https://target:8443/", 15, 200, False,
+             settings={"ssl_verify": "true"}),
+    Scenario("tls-bad-ca-path", "https://target:8443/", 15, None, False,
+             "ca_certs not readable",
+             settings={"ssl_verify": "true", "ca_certs": "/nonexistent.pem"}),
+    Scenario("tls-old-protocol", "https://target:8448/", 15, None, False,
+             "TLS handshake failed"),
     Scenario("proxy-ignored", f"{T}/status/200", 15, 200, False,
              settings={"user_agent": "wptest-proxy-ignored"}),
 ]  # fmt: skip

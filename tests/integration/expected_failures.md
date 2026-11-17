@@ -16,6 +16,5 @@ first two. Scenario names are those of `test_network.py` unless the row says
 
 | Scenario | 9.4 / 3.9 | 10.6 / 3.13 | 10.6 / 3.9 | Field that differs on the current code | Defect |
 | --- | --- | --- | --- | --- | --- |
-| `tls-expired` | Fails | Fails | Fails | `response_code` 200, `error` absent | Certificates are not verified inside Splunk (`PYTHONHTTPSVERIFY=0`) |
-| `tls-self-signed` | Fails | Fails | Fails | `response_code` 200, `error` absent | Certificates are not verified inside Splunk (`PYTHONHTTPSVERIFY=0`) |
-| `tls-wrong-host` | Fails | Fails | Fails | `response_code` 200, `error` absent | Certificates are not verified inside Splunk (`PYTHONHTTPSVERIFY=0`) |
+| | | | | | |
+No scenario is expected to fail on the current code.

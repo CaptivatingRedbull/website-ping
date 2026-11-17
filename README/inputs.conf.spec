@@ -86,12 +86,26 @@ error_threshold = <integer>
 * Default: blank
 
 ssl_verify = <boolean>
-* If true (or 1), the server certificate is verified.
-* Default: blank (use the setting in website_monitoring.conf)
+* If true (or 1), the server certificate and the host name are checked. A
+  certificate that fails gives an event with an empty response_code and the
+  reason in the error field, for example
+  "SSLCertVerificationError: certificate has expired".
+* If false (or 0), any certificate is accepted, as in Website Monitoring.
+* TLS 1.0 and 1.1 are refused either way.
+* Default: blank, which means false
 
 ca_certs = <string>
-* Path to a file of CA certificates used when ssl_verify is true.
-* Default: blank (the system CA bundle)
+* Path to a PEM file of the CA certificates to trust, used when ssl_verify is
+  true. It must contain the root certificate; an intermediate alone is not
+  enough.
+* Blank: the file named by the SSL_CERT_FILE environment variable, else the
+  first operating system CA bundle that exists:
+  /etc/ssl/certs/ca-certificates.crt, /etc/pki/tls/certs/ca-bundle.crt,
+  /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem, /etc/ssl/ca-bundle.pem.
+* If the file cannot be read or no bundle exists, no request is sent and the
+  error field says why.
+* The file is read once, when the input starts.
+* Default: blank
 
 log_level = <string>
 * Log level for this input: DEBUG, INFO, WARN or ERROR.

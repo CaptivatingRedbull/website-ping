@@ -19,6 +19,8 @@ ERROR_PATTERNS: dict[str, str] = {
     "Self-signed certificate": r"^SSLCertVerificationError: .*self[- ]signed certificate",
     "Wrong hostname": r"^SSLCertVerificationError: .*Hostname mismatch",
     "Unreachable network": r"^OSError: .*Network is unreachable",
+    "TLS handshake failed": r"^SSLError: ",
+    "ca_certs not readable": r"^ca_certs not readable: ",
 }
 
 

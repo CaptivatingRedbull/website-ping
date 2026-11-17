@@ -75,6 +75,53 @@ and can take longer than `timeout`, as with Website Monitoring. A server that
 sends its TLS handshake slowly, a few bytes at a time, can also hold a check
 beyond `timeout`.
 
+## Certificates and TLS
+
+Certificates are not checked unless an input sets `ssl_verify = true`. Website
+Monitoring did not check them either, and existing inputs keep working after a
+migration. This deviates from Splunk's guidance, which is to verify
+certificates.
+
+For new deployments, turn verification on for every input in
+`local/inputs.conf`; an input can still switch it off with
+`ssl_verify = false`:
+
+```ini
+[web_ping]
+ssl_verify = true
+```
+
+With verification on, a check tests the certificate chain and the host name.
+`ca_certs` names a PEM file with the CAs to trust, for example an internal CA;
+it must contain the root certificate, an intermediate alone is not enough.
+Without `ca_certs` the input uses the file in `SSL_CERT_FILE`, if set, else the
+first of these that exists: `/etc/ssl/certs/ca-certificates.crt` (Debian,
+Ubuntu), `/etc/pki/tls/certs/ca-bundle.crt` (RHEL family, the Splunk container
+images), `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`,
+`/etc/ssl/ca-bundle.pem` (SUSE). Splunk's own Python has no usable CA store,
+and the app ships none.
+
+A certificate that fails gives an event with an empty `response_code` and an
+`error` such as `SSLCertVerificationError: certificate has expired`,
+`SSLCertVerificationError: self-signed certificate` or
+`SSLCertVerificationError: Hostname mismatch, ...`. If the CA file cannot be
+read or no bundle exists, the check sends no request; `error` is
+`ca_certs not readable: <path>` or `no CA bundle found, set ca_certs`, and
+`website_ping.log` gets one ERROR line. The CA file is read once when the
+input starts; a changed file takes effect at the next restart.
+
+Splunk starts its Python processes with `PYTHONHTTPSVERIFY=0`. The input does
+not depend on it: every check uses its own TLS settings.
+
+Every check requires TLS 1.2 or later, with or without verification and on
+every Splunk version. A site that speaks only TLS 1.0 or 1.1 gives an empty
+`response_code` and an `error` starting with `SSLError:`. On Splunk 9.4,
+Website Monitoring still accepted those sites.
+
+Python 3.9 and 3.13 check certificates the same way: the stricter checks that
+Python 3.13 turns on by default are off, so a certificate accepted on Splunk
+9.4 is accepted on 10.x and the other way round.
+
 ## Logging
 
 The input writes its log to `$SPLUNK_HOME/var/log/splunk/website_ping.log`,

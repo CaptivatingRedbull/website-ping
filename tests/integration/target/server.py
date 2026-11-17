@@ -19,6 +19,7 @@ import ssl
 import sys
 import threading
 import time
+import warnings
 import zlib
 from collections.abc import Mapping, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,7 +29,9 @@ from urllib.request import parse_http_list, parse_keqv_list
 CERTS = "/srv/certs"
 TLS_PORTS = {8443: "valid", 8444: "expired", 8445: "self-signed", 8446: "wrong-host"}
 MTLS_PORT = 8447
-ANY_ROUTE_PORTS = frozenset({*TLS_PORTS, MTLS_PORT})
+OLD_PROTOCOL_PORT = 8448
+"""The valid certificate, but nothing newer than TLS 1.1."""
+ANY_ROUTE_PORTS = frozenset({*TLS_PORTS, MTLS_PORT, OLD_PROTOCOL_PORT})
 HTTP_PORT = 8080
 SILENT_PORT = 8081
 
@@ -472,11 +475,21 @@ def silent(port: int) -> None:
         timer.start()
 
 
-def tls_server(port: int, name: str, client_ca: str | None = None) -> Server:
-    """A server with the named certificate; with client_ca, client certificates are required."""
+def tls_server(
+    port: int, name: str, client_ca: str | None = None, old_protocol: bool = False
+) -> Server:
+    """A server with the named certificate; with client_ca, client certificates are
+    required; with old_protocol, it speaks only TLS 1.0 and 1.1."""
     server = Server(("0.0.0.0", port), Handler)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(f"{CERTS}/{name}.pem", f"{CERTS}/{name}.key")
+    if old_protocol:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            context.minimum_version = ssl.TLSVersion.TLSv1
+            context.maximum_version = ssl.TLSVersion.TLSv1_1
+        # OpenSSL 3 allows TLS 1.0 and 1.1 only at security level 0.
+        context.set_ciphers("DEFAULT:@SECLEVEL=0")
     if client_ca is not None:
         context.verify_mode = ssl.CERT_REQUIRED
         context.load_verify_locations(client_ca)
@@ -492,6 +505,7 @@ def main() -> None:
     servers: list[Server] = [Server(("0.0.0.0", HTTP_PORT), Handler)]
     servers += [tls_server(port, name) for port, name in TLS_PORTS.items()]
     servers.append(tls_server(MTLS_PORT, "valid", client_ca=f"{CERTS}/ca.pem"))
+    servers.append(tls_server(OLD_PROTOCOL_PORT, "valid", old_protocol=True))
     threads = [
         threading.Thread(target=serve, args=(server,), daemon=True)
         for server in servers
@@ -499,7 +513,8 @@ def main() -> None:
     threads.append(threading.Thread(target=silent, args=(SILENT_PORT,), daemon=True))
     for thread in threads:
         thread.start()
-    log({"listening": [HTTP_PORT, SILENT_PORT, *TLS_PORTS, MTLS_PORT]})
+    ports = [HTTP_PORT, SILENT_PORT, *TLS_PORTS, MTLS_PORT, OLD_PROTOCOL_PORT]
+    log({"listening": ports})
     for thread in threads:
         thread.join()
 

@@ -34,6 +34,10 @@ INVALID_STANZAS = {
     "bad-config": "url must use http or https",
     "no-interval": "interval is required",
 }
+SETUP_ERROR_STANZAS = {
+    "tls-bad-ca-path": "certificates cannot be verified: ca_certs not readable",
+}
+"""Stanzas that run, but log one ERROR line per process about their settings."""
 
 
 def standalone_stanzas() -> dict[str, dict[str, str]]:
@@ -214,8 +218,39 @@ def test_interval_with_unit(standalone: Stack) -> None:
     assert all(55 <= gap <= 75 for gap in gaps), f"gaps {gaps}"
 
 
+@pytest.mark.parametrize("name", sorted(SETUP_ERROR_STANZAS))
+def test_setup_error_is_logged_once(standalone: Stack, name: str) -> None:
+    searcher = standalone.searcher("so1")
+    _ = wait_for(
+        f"two {name} events",
+        lambda: (
+            found
+            if len(found := searcher.search(events_query(name, standalone.mark))) >= 2
+            else None
+        ),
+        EVENT_TIMEOUT,
+        standalone.stages,
+    )
+    errors = wait_for(
+        f"{name} ERROR line",
+        lambda: (
+            searcher.search(
+                errors_query(standalone.mark, f'"stanza=web_ping://{name}"')
+            )
+            or None
+        ),
+        EVENT_TIMEOUT,
+        standalone.stages,
+    )
+    assert len(errors) == 1, errors
+    assert SETUP_ERROR_STANZAS[name] in errors[0]["_raw"], errors
+
+
 def test_no_error_lines_for_other_stanzas(standalone: Stack) -> None:
-    excluded = " ".join(f'NOT "stanza=web_ping://{name}"' for name in INVALID_STANZAS)
+    excluded = " ".join(
+        f'NOT "stanza=web_ping://{name}"'
+        for name in [*INVALID_STANZAS, *SETUP_ERROR_STANZAS]
+    )
     errors = standalone.searcher("so1").search(
         errors_query(standalone.mark, f'"stanza=web_ping://" {excluded}')
     )

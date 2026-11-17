@@ -79,7 +79,8 @@ def _server(folder: Path, name: str, host: str, *validity: str) -> None:
     _signed(folder, name, host, SERVER_EXTENSIONS.format(host=host), *validity)
 
 
-def generate(folder: Path) -> Certificates:
+def generate(folder: Path, host: str = "target") -> Certificates:
+    """Certificates for a server reached as host ("target" in the stacks)."""
     folder.mkdir(parents=True, exist_ok=True)
     _openssl(
         folder,
@@ -88,17 +89,17 @@ def generate(folder: Path) -> Certificates:
         "-addext", "basicConstraints=critical,CA:TRUE",
         "-addext", "keyUsage=critical,keyCertSign,cRLSign",
     )  # fmt: skip
-    _server(folder, "valid", "target", "-days", "2")
+    _server(folder, "valid", host, "-days", "2")
     _server(
-        folder, "expired", "target",
+        folder, "expired", host,
         "-not_before", "20200101000000Z", "-not_after", "20200201000000Z",
     )  # fmt: skip
     _server(folder, "wrong-host", "wrong.invalid", "-days", "2")
     _openssl(
         folder,
         "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
-        "-keyout", "self-signed.key", "-out", "self-signed.pem", "-subj", "/CN=target",
-        "-addext", "subjectAltName=DNS:target",
+        "-keyout", "self-signed.key", "-out", "self-signed.pem", "-subj", f"/CN={host}",
+        "-addext", f"subjectAltName=DNS:{host}",
         "-addext", "basicConstraints=critical,CA:FALSE",
     )  # fmt: skip
     _signed(folder, "client", CLIENT_CN, CLIENT_EXTENSIONS, "-days", "2")

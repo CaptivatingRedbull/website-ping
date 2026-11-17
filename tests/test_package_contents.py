@@ -22,6 +22,7 @@ EXPECTED_FILES = {
     "bin/wp_event_fields.py",
     "bin/wp_http.py",
     "bin/wp_runner.py",
+    "bin/wp_tls.py",
     "bin/wp_url.py",
     "bin/wp_version.py",
     "default/app.conf",

@@ -314,14 +314,10 @@ def test_trickled_body_ends_at_the_timeout() -> None:
 @pytest.mark.parametrize("tls", [False, True], ids=["http", "https"])
 @pytest.mark.parametrize("trickle", ["headers", "body"])
 def test_expiry_ends_a_trickle(
-    monkeypatch: pytest.MonkeyPatch,
-    tls_files: tuple[Path, Path],
-    tls: bool,
-    trickle: str,
+    tls_files: tuple[Path, Path], tls: bool, trickle: str
 ) -> None:
     # Each byte arrives well within the socket timeout, so only the expiry (the
     # runner's tick in production, a timer here) can end the check.
-    monkeypatch.setenv("SSL_CERT_FILE", str(tls_files[0]))
     server = TrickleServer(trickle, 0.1, tls_files if tls else None)
     deadline = Deadline(time.monotonic() + 30)
     timer = threading.Timer(1.0, deadline.expire)

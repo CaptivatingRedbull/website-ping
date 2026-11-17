@@ -20,6 +20,9 @@ DEFAULT_TIMEOUT = 30
 DEFAULT_CONFIGURATION = "default"
 DEFAULT_SOURCETYPE = "web_ping"
 DEFAULT_LOG_LEVEL = "INFO"
+DEFAULT_SSL_VERIFY = False
+"""Certificates are not checked unless ssl_verify is set, as in Website Monitoring,
+so existing inputs keep working after a migration."""
 UNLIMITED_REDIRECTS = 30
 """Redirects followed when max_redirects is blank or negative (the requests default
 that Website Monitoring relied on)."""

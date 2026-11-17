@@ -50,8 +50,20 @@ title = realnet-valid
 url = https://example.com/
 interval = 3600
 
+[web_ping://realnet-valid-verified]
+title = realnet-valid-verified
+url = https://example.com/
+interval = 3600
+ssl_verify = true
+
 [web_ping://realnet-expired]
 title = realnet-expired
+url = https://expired.badssl.com/
+interval = 3600
+ssl_verify = true
+
+[web_ping://realnet-expired-default]
+title = realnet-expired-default
 url = https://expired.badssl.com/
 interval = 3600
 
@@ -59,11 +71,13 @@ interval = 3600
 title = realnet-self-signed
 url = https://self-signed.badssl.com/
 interval = 3600
+ssl_verify = true
 
 [web_ping://realnet-wrong-host]
 title = realnet-wrong-host
 url = https://wrong.host.badssl.com/
 interval = 3600
+ssl_verify = true
 
 [web_ping://realnet-blocked]
 title = realnet-blocked
@@ -86,11 +100,13 @@ docker exec -u splunk -e SPLUNK_USERNAME=admin wptest-realnet /opt/splunk/bin/sp
 
 | Stanza | Expected |
 | --- | --- |
-| `realnet-valid` | `response_code=200`, `timed_out=False`, no `error`. Verification passes. |
-| `realnet-expired` | `response_code=0`, `error` matches `^SSLCertVerificationError: .*certificate has expired` |
-| `realnet-self-signed` | `response_code=0`, `error` matches `^SSLCertVerificationError: .*self[- ]signed certificate` |
-| `realnet-wrong-host` | `response_code=0`, `error` matches `^SSLCertVerificationError: .*Hostname mismatch` |
-| `realnet-blocked` | `response_code=0`, `timed_out=True`. The firewall rule drops it silently and nothing listens on that port. |
+| `realnet-valid` | `response_code=200`, `timed_out=False`, no `error`. Certificates are not checked by default. |
+| `realnet-valid-verified` | `response_code=200`, `timed_out=False`, no `error`. Verified against the container's CA bundle `/etc/pki/tls/certs/ca-bundle.crt` (the container has no `SSL_CERT_FILE`). |
+| `realnet-expired` | `response_code` empty, `error` matches `^SSLCertVerificationError: .*certificate has expired` |
+| `realnet-expired-default` | `response_code=200`, no `error`. Without `ssl_verify` an expired certificate is accepted, as with Website Monitoring. |
+| `realnet-self-signed` | `response_code` empty, `error` matches `^SSLCertVerificationError: .*self[- ]signed certificate` |
+| `realnet-wrong-host` | `response_code` empty, `error` matches `^SSLCertVerificationError: .*Hostname mismatch` |
+| `realnet-blocked` | `response_code` empty, `timed_out=True`. The firewall rule drops it silently and nothing listens on that port. |
 
 The three certificate rows cannot pass until the app verifies certificates
 inside Splunk (see `expected_failures.md`). A release requires them to pass.

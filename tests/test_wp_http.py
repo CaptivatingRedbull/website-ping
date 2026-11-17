@@ -334,7 +334,7 @@ def deadline_opener(deadline: Deadline) -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(
         urllib.request.ProxyHandler({}),
         DeadlineHTTPHandler(sockets),
-        DeadlineHTTPSHandler(sockets, client_context()),
+        DeadlineHTTPSHandler(sockets, client_context),
     )
 
 
