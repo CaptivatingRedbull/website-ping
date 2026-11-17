@@ -206,9 +206,6 @@ CONF_STANZAS: Mapping[str, Mapping[str, str]] = MappingProxyType(
         ),
     }
 )
-_REDIRECTS = (
-    "needs redirect handling beyond Python's built-in limits (10 redirects, 4 repeats)"
-)
 _CONTENT = "needs content checks"
 _BODY = "needs the response body event"
 _AUTH = "needs HTTP authentication with passwords from storage/passwords"
@@ -217,7 +214,6 @@ _URL = "needs URL encoding of spaces and non-ASCII characters"
 
 PENDING: Mapping[str, str] = MappingProxyType(
     {
-        **dict.fromkeys(("minus-one-25", "blank-25", "blank-31", "loop"), _REDIRECTS),
         **dict.fromkeys((f"content-{case}" for case in CONTENT_CASES), _CONTENT),
         **dict.fromkeys(("match-yes", "match-no"), _CONTENT),
         **dict.fromkeys(

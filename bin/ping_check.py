@@ -7,12 +7,17 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import IO, cast
+from typing import Protocol, cast
 
-from compat import override
 from logger import stanza_logger
 from ping_config import UNLIMITED_REDIRECTS, Settings
 from wp_deadline import Deadline
+from wp_http import (
+    DeadlineHTTPHandler,
+    DeadlineHTTPSHandler,
+    DeadlineSockets,
+    LimitedRedirectHandler,
+)
 
 CHUNK_SIZE = 64 * 1024
 MAX_ERROR_LENGTH = 200
@@ -56,42 +61,24 @@ class CheckResult:
     """Response body for the body event, when return_body is set."""
 
 
-class LimitedRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Follow at most max_redirects redirects, then let the 3xx surface as an HTTPError."""
-
-    def __init__(self, max_redirects: int) -> None:
-        self.max_redirects: int = max_redirects
-        self.followed: int = 0
-        self.limit_reached: bool = False
-
-    @override
-    def redirect_request(
-        self,
-        req: urllib.request.Request,
-        fp: IO[bytes],
-        code: int,
-        msg: str,
-        headers: http.client.HTTPMessage,
-        newurl: str,
-    ) -> urllib.request.Request | None:
-        if self.followed >= self.max_redirects:
-            self.limit_reached = True
-            return None
-        self.followed += 1
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+class _Body(Protocol):
+    def read1(self, n: int = ..., /) -> bytes: ...
 
 
-def _drain(response: IO[bytes], deadline: Deadline) -> bool:
-    """Read and discard the body. False if the deadline passed or a read timed out."""
+def _drain(response: _Body, deadline: Deadline, sockets: DeadlineSockets) -> bool:
+    """Read and discard the body. False if the deadline passed or expired first."""
     while True:
+        if deadline.passed():
+            return False
+        sockets.tighten()
         try:
-            chunk = response.read(CHUNK_SIZE)
+            chunk = response.read1(CHUNK_SIZE)
         except (socket.timeout, TimeoutError):
             return False
         if not chunk:
-            return True
-        if deadline.passed():
-            return False
+            # Expiry shuts the socket down, which a body without a length would
+            # otherwise take for its regular end.
+            return not deadline.expired
 
 
 def _fetch(
@@ -99,15 +86,17 @@ def _fetch(
     request: urllib.request.Request,
     timeout: int,
     deadline: Deadline,
+    sockets: DeadlineSockets,
 ) -> tuple[int, bool]:
     """Return (status code, body completely read). Transport errors propagate."""
     try:
         response = cast(http.client.HTTPResponse, opener.open(request, timeout=timeout))
         with response:
-            return response.status, _drain(response, deadline)
+            return response.status, _drain(response, deadline, sockets)
     except urllib.error.HTTPError as exc:
         with exc:
-            return exc.code, _drain(exc, deadline)
+            # HTTPError hands attribute access on to the response it wraps.
+            return exc.code, _drain(cast(_Body, exc), deadline, sockets)
 
 
 def _is_timeout(reason: object) -> bool:
@@ -117,27 +106,41 @@ def _is_timeout(reason: object) -> bool:
     return isinstance(reason, OSError) and reason.errno == errno.ETIMEDOUT
 
 
+def _timed_out(exc: BaseException) -> bool:
+    if isinstance(exc, urllib.error.URLError):
+        return _is_timeout(exc.reason)
+    return _is_timeout(exc)
+
+
 def _describe(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"[:MAX_ERROR_LENGTH]
 
 
 def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResult:
-    """Run one check. The body is not read further once deadline has passed or
-    was expired; by default the deadline is the stanza's timeout from now."""
+    """Run one check within deadline, by default the stanza's timeout from now.
+
+    The deadline covers connecting, every redirect, the headers and the body. Any
+    failure once the deadline has expired is a timeout."""
     slog = stanza_logger(settings["stanza"], settings["log_level"])
     max_redirects = settings["max_redirects"]
     if max_redirects is None:
         max_redirects = UNLIMITED_REDIRECTS
-    redirects = LimitedRedirectHandler(max_redirects)
-    # ProxyHandler({}) ignores proxy environment variables (will be implemented later)
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), redirects)
-    request = urllib.request.Request(
-        settings["url"], headers={"User-Agent": settings["user_agent"]}, method="GET"
-    )
     timeout = settings["timeout"]
     start = time.monotonic()
     if deadline is None:
         deadline = Deadline(start + timeout)
+    sockets = DeadlineSockets(deadline)
+    redirects = LimitedRedirectHandler(max_redirects)
+    # ProxyHandler({}) ignores proxy environment variables (will be implemented later)
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        DeadlineHTTPHandler(sockets),
+        DeadlineHTTPSHandler(sockets),
+        redirects,
+    )
+    request = urllib.request.Request(
+        settings["url"], headers={"User-Agent": settings["user_agent"]}, method="GET"
+    )
 
     def result(
         code: int | None,
@@ -156,17 +159,18 @@ def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResu
         )
 
     try:
-        code, complete = _fetch(opener, request, timeout, deadline)
-    except urllib.error.URLError as exc:
-        if _is_timeout(exc.reason):
+        code, complete = _fetch(opener, request, timeout, deadline, sockets)
+    except Exception as exc:  # noqa: BLE001 - a check must always produce an event
+        # After expiry the sockets were shut down under the check: whatever that
+        # raised (reset, TLS or protocol error) means the time ran out.
+        if deadline.expired or _timed_out(exc):
             return result(None, timed_out=True)
-        detail = exc.reason if isinstance(exc.reason, BaseException) else exc
-        return result(None, error=_describe(detail))
-    except (OSError, http.client.HTTPException) as exc:
-        if _is_timeout(exc):
-            return result(None, timed_out=True)
-        return result(None, error=_describe(exc))
-    except Exception as exc:  # noqa: BLE001 - last resort, a check must always produce an event
+        if isinstance(exc, urllib.error.URLError):
+            reason = exc.reason
+            detail = reason if isinstance(reason, BaseException) else exc
+            return result(None, error=_describe(detail))
+        if isinstance(exc, (OSError, http.client.HTTPException)):
+            return result(None, error=_describe(exc))
         slog.exception("unexpected error during check")
         return result(None, error="unexpected " + _describe(exc))
     if not complete:

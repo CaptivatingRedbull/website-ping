@@ -55,6 +55,26 @@ any other reason. It logs a `heartbeat` line every minute:
 index=_internal sourcetype=website_ping:log heartbeat
 ```
 
+## Timeouts and redirects
+
+`timeout` (seconds, default 30) is the time one check may take in total:
+connecting, every redirect, the response headers and the whole body. A check
+that is not done by then gives an event with `timed_out=True` and an empty
+`response_code`, even if a status line had already arrived. Website Monitoring
+applied `timeout` to each network operation instead, so a slow server could keep
+one of its checks busy far longer.
+
+`max_redirects` is the number of redirects a check follows (301, 302, 303, 307
+and 308). On the next redirect the check stops with `exceeded_redirects=True` and
+an empty `response_code`; `max_redirects = 0` stops at the first one. Blank or
+negative means 30. A redirect loop runs into the same limit. An `Authorization`
+header is not sent on when a redirect leads to another host name.
+
+Known limits of the timeout: resolving the host name (DNS) cannot be interrupted
+and can take longer than `timeout`, as with Website Monitoring. A server that
+sends its TLS handshake slowly, a few bytes at a time, can also hold a check
+beyond `timeout`.
+
 ## Logging
 
 The input writes its log to `$SPLUNK_HOME/var/log/splunk/website_ping.log`,

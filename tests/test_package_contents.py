@@ -19,6 +19,7 @@ EXPECTED_FILES = {
     "bin/web_ping.py",
     "bin/wp_deadline.py",
     "bin/wp_event_fields.py",
+    "bin/wp_http.py",
     "bin/wp_runner.py",
     "bin/wp_version.py",
     "default/app.conf",

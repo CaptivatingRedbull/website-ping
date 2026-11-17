@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import errno
+import json
 import socket
+import ssl
 import threading
 import time
 import urllib.error
 from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import cast
 
 import ping_check
@@ -12,7 +17,9 @@ import pytest
 from compat import override
 from ping_check import check_url
 from ping_config import Settings, build_settings
+from target import server
 from wp_deadline import Deadline
+from wptest import golden, legacy, parity
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -33,6 +40,13 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/hang":
             time.sleep(3)
             self._send(200, b"late")
+        elif self.path.startswith("/slow-redir/"):
+            hops = int(self.path.rsplit("/", 1)[1])
+            time.sleep(0.6)
+            self.send_response(302)
+            self.send_header("Location", f"/slow-redir/{hops + 1}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
         elif self.path == "/slow-body":
             self.send_response(200)
             self.send_header("Content-Length", "4")
@@ -168,3 +182,186 @@ def test_expired_deadline_ends_the_body_read(base_url: str) -> None:
     deadline.expire()
     r = check_url(make(base_url + "/ok"), deadline)
     assert r.timed_out and r.response_code is None
+
+
+def test_timeout_covers_every_redirect_hop(base_url: str) -> None:
+    r = check_url(make(base_url + "/slow-redir/0", timeout="2"))
+    assert r.timed_out and r.response_code is None and r.error == ""
+    assert r.elapsed < 2.5
+
+
+class TrickleServer:
+    """Loopback server that sends its answer one byte every interval seconds:
+    the body ("body") or the whole response from the status line on ("headers")."""
+
+    def __init__(
+        self, trickle: str, interval: float, tls: tuple[Path, Path] | None = None
+    ) -> None:
+        self.trickle: str = trickle
+        self.interval: float = interval
+        self.context: ssl.SSLContext | None = None
+        if tls is not None:
+            self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            self.context.load_cert_chain(str(tls[0]), str(tls[1]))
+        self.listener: socket.socket = socket.create_server(("127.0.0.1", 0))
+        self.stop: threading.Event = threading.Event()
+        threading.Thread(target=self._accept, daemon=True).start()
+
+    @property
+    def url(self) -> str:
+        scheme = "https" if self.context else "http"
+        return f"{scheme}://127.0.0.1:{self.listener.getsockname()[1]}/"
+
+    def _accept(self) -> None:
+        while not self.stop.is_set():
+            try:
+                conn, _ = self.listener.accept()
+            except OSError:
+                return
+            threading.Thread(target=self._serve, args=(conn,), daemon=True).start()
+
+    def _serve(self, conn: socket.socket) -> None:
+        try:
+            if self.context is not None:
+                conn = self.context.wrap_socket(conn, server_side=True)
+            data = b""
+            while b"\r\n\r\n" not in data:
+                chunk = conn.recv(4096)
+                if not chunk:
+                    return
+                data += chunk
+            head = b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n"
+            if self.trickle == "body":
+                conn.sendall(head)
+                payload = b"x" * 1000
+            else:
+                payload = head + b"x" * 1000
+            for byte in payload:
+                if self.stop.wait(self.interval):
+                    return
+                conn.sendall(bytes([byte]))
+        except OSError:
+            pass
+        finally:
+            conn.close()
+
+    def close(self) -> None:
+        self.stop.set()
+        self.listener.close()
+
+
+def test_trickled_body_ends_at_the_timeout() -> None:
+    server = TrickleServer("body", 0.5)
+    try:
+        r = check_url(make(server.url, timeout="2"))
+    finally:
+        server.close()
+    assert r.timed_out and r.response_code is None and r.error == ""
+    assert r.elapsed < 2.5
+
+
+@pytest.mark.parametrize("tls", [False, True], ids=["http", "https"])
+@pytest.mark.parametrize("trickle", ["headers", "body"])
+def test_expiry_ends_a_trickle(
+    monkeypatch: pytest.MonkeyPatch,
+    tls_files: tuple[Path, Path],
+    tls: bool,
+    trickle: str,
+) -> None:
+    # Each byte arrives well within the socket timeout, so only the expiry (the
+    # runner's tick in production, a timer here) can end the check.
+    monkeypatch.setenv("SSL_CERT_FILE", str(tls_files[0]))
+    server = TrickleServer(trickle, 0.1, tls_files if tls else None)
+    deadline = Deadline(time.monotonic() + 30)
+    timer = threading.Timer(1.0, deadline.expire)
+    timer.start()
+    try:
+        r = check_url(make(server.url, timeout="30"), deadline)
+    finally:
+        timer.join()
+        server.close()
+    assert r.timed_out and r.response_code is None and r.error == ""
+    assert r.elapsed < 2
+
+
+# ---- redirects, compared with Website Monitoring 2.9.7's fixtures -----------
+
+GOLDEN_DIR = Path(__file__).parent / "golden" / legacy.LEGACY_VERSION
+REDIRECT_FIXTURES = (
+    "redirects-off",
+    "over-3",
+    "chain-at-3",
+    "blank-25",
+    "blank-31",
+    "minus-one-25",
+    "loop",
+)
+
+
+@pytest.fixture(scope="module")
+def target_base() -> Iterator[str]:
+    httpd = server.Server(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{httpd.server_address[1]}"
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def target_requests(
+    capsys: pytest.CaptureFixture[str], scenario: parity.ParityScenario
+) -> list[dict[str, object]]:
+    records = [
+        cast("dict[str, object]", json.loads(line))
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("{")
+    ]
+    return [
+        r
+        for r in records
+        if "path" in r and scenario.matches_request(0, str(r["path"]))
+    ]
+
+
+@pytest.mark.parametrize("title", REDIRECT_FIXTURES)
+def test_redirects_match_the_fixture(
+    target_base: str, capsys: pytest.CaptureFixture[str], title: str
+) -> None:
+    scenario = parity.by_title()[title]
+    capture = golden.read_capture(GOLDEN_DIR, title)
+    (event,) = [e for e in capture.events if e.sourcetype == golden.CHECK_SOURCETYPE]
+    url = scenario.url.replace(parity.T, target_base)
+    _ = capsys.readouterr()
+    r = check_url(make(url, **scenario.settings))
+    assert len(target_requests(capsys, scenario)) == len(capture.requests)
+    code = event.fields["response_code"]
+    assert r.response_code == (int(str(code)) if code else None)
+    assert r.exceeded_redirects == ("exceeded_redirects" in event.fields)
+    assert not r.timed_out
+
+
+@pytest.mark.parametrize(
+    ("path", "limit", "code", "requests"),
+    [
+        ("/chain/chain-at-50/50", "50", 200, 51),
+        ("/chain/over-50/51", "50", None, 51),
+        ("/repeat/repeat-8/8", "10", 200, 9),
+        ("/loop/loop-10", "10", None, 11),
+    ],
+    ids=["chain-at-50", "over-50", "repeat-8", "loop-10"],
+)
+def test_only_max_redirects_limits_redirects(
+    target_base: str,
+    capsys: pytest.CaptureFixture[str],
+    path: str,
+    limit: str,
+    code: int | None,
+    requests: int,
+) -> None:
+    scenario = parity.ParityScenario(path.split("/")[2], parity.T + path)
+    _ = capsys.readouterr()
+    r = check_url(make(target_base + path, max_redirects=limit))
+    assert len(target_requests(capsys, scenario)) == requests
+    assert r.response_code == code
+    assert r.exceeded_redirects == (code is None)
+    if code is None:
+        assert r.error == f"redirect limit of {limit} reached"
