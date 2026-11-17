@@ -12,7 +12,7 @@ from wptest.evidence import Evidence
 from wptest.install import ROOT
 from wptest.splunk_rest import Searcher
 from wptest.stack import Stack
-from wptest.wait import INDEXED, wait_for
+from wptest.wait import INDEXED, STARTED, wait_for
 
 pytestmark = pytest.mark.parity
 
@@ -22,6 +22,8 @@ EVENT_TIMEOUT = 180
 
 def _param(scenario: parity.ParityScenario) -> object:
     reason = parity.PENDING.get(scenario.title)
+    if scenario.title in parity.REFUSED:
+        reason = "refused by website-ping on purpose; see the refused-stanza test"
     marks = [pytest.mark.skip(reason=reason)] if reason else []
     return pytest.param(scenario, id=scenario.title, marks=marks)
 
@@ -70,3 +72,65 @@ def test_check_event_matches_golden(
         lines += [f"  {line}" for line in failing]
         lines += [f"  _raw: {actual.raw}"]
         pytest.fail("\n".join(lines), pytrace=False)
+
+
+def first_requests(
+    stack: Stack, scenario: parity.ParityScenario, count: int
+) -> list[golden.TargetRequest] | None:
+    """The scenario's first count requests since the mark, or None until logged."""
+    sent = [
+        golden.target_request(record)
+        for record in stack.target_log()
+        if scenario.matches_request(
+            int(str(record.get("port", 0))), str(record.get("path", ""))
+        )
+    ]
+    return sent[:count] if len(sent) >= count else None
+
+
+@pytest.mark.parametrize("title", parity.REQUESTS_COMPARED)
+def test_requests_match_golden(
+    parity_stack: Stack, title: str, evidence: Evidence
+) -> None:
+    scenario = parity.by_title()[title]
+    fixture = golden.read_capture(GOLDEN_DIR, title)
+    assert fixture.requests, f"{title}: the fixture has no request"
+    sent = wait_for(
+        INDEXED,
+        lambda: first_requests(parity_stack, scenario, len(fixture.requests)),
+        EVENT_TIMEOUT,
+        parity_stack.stages,
+    )
+    diffs = golden.compare_requests(fixture.requests, sent, golden.REQUEST_ALLOWED)
+    evidence.note(
+        f"{parity_stack.project}.parity-requests.{title}", [str(d) for d in diffs]
+    )
+    failing = [str(diff) for diff in golden.failing(diffs)]
+    if failing:
+        lines = [f"{title}: {len(failing)} request field(s) differ from 2.9.7"]
+        pytest.fail("\n".join(lines + [f"  {line}" for line in failing]), pytrace=False)
+
+
+@pytest.mark.parametrize("title", sorted(parity.REFUSED))
+def test_refused_stanza_logs_an_error_and_is_not_run(
+    parity_stack: Stack, title: str
+) -> None:
+    prefix = f"ERROR stanza=web_ping://{title} "
+    message = parity.REFUSED[title]
+    line = wait_for(
+        STARTED,
+        lambda: next(
+            (
+                line
+                for _, line in parity_stack.app_log("so1")
+                if prefix in line and message in line
+            ),
+            None,
+        ),
+        EVENT_TIMEOUT,
+        parity_stack.stages,
+    )
+    assert "not run" in line, line
+    searcher = parity_stack.searcher("so1")
+    assert check_rows(searcher, title, parity_stack.mark) is None
+    assert parity_stack.target_requests(title) == 0

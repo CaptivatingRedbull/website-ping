@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -193,7 +194,15 @@ def test_sourcetype_difference_is_reported_first() -> None:
 
 def test_allowed_fields_merge_global_and_title() -> None:
     allowed = golden.allowed_fields("status-200")
-    assert set(allowed) == {"error", "content_md5", "content_sha224", "content_size"}
+    assert set(allowed) == {
+        "error",
+        "content_md5",
+        "content_sha224",
+        "content_size",
+        "header_Connection",
+        "header_Keep-Alive",
+        "header_Keep_Alive",
+    }
     assert golden.ANY_FIELD in golden.allowed_fields("ntlm-offered")
     assert {"_time", "timestamp"} <= set(golden.allowed_fields("date-in-title"))
 
@@ -204,6 +213,31 @@ def test_host_allowed_only_where_2_9_7_wrote_the_placeholder() -> None:
     named = event("a=1", host="wptest-host")
     assert "host" not in golden.parity_allowed("host-set", named)
     assert "host" not in golden.allowed_fields("status-200")
+
+
+def test_compare_requests_marks_allowed_fields() -> None:
+    sent = golden.TargetRequest(8080, "GET", "/a", "ua-1", "", 200, connection="close")
+    kept = dataclasses.replace(sent, user_agent="ua-2", connection="keep-alive")
+    diffs = golden.compare_requests([kept], [sent], golden.REQUEST_ALLOWED)
+    assert {d.field for d in diffs} == {
+        "request 0: user_agent",
+        "request 0: connection",
+    }
+    assert golden.failing(diffs) == []
+
+
+def test_compare_requests_reports_order_and_count() -> None:
+    first = golden.TargetRequest(
+        8080, "GET", "/a", "ua", "", 302, header_names=("Host", "Cookie")
+    )
+    second = dataclasses.replace(first, status=200)
+    expected = dataclasses.replace(first, header_names=("Host", "Accept", "Cookie"))
+    diffs = golden.compare_requests([expected, second], [first], golden.REQUEST_ALLOWED)
+    order = 'expected ["Host", "Accept", "Cookie"], got ["Host", "Cookie"]'
+    assert [str(d) for d in golden.failing(diffs)] == [
+        "request count: expected 2, got 1",
+        f"request 0: header_names: {order}",
+    ]
 
 
 def test_export_query_for_one_stanza() -> None:

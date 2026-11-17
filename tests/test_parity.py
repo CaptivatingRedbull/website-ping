@@ -6,6 +6,7 @@ import configparser
 from urllib.parse import urlsplit
 
 import pytest
+from ping_config import ConfigError, build_settings
 from target import server
 from wptest import parity
 from wptest.parity import PARITY_SCENARIOS, ParityScenario
@@ -154,9 +155,32 @@ def test_pending_names_known_scenarios_and_a_missing_feature() -> None:
         assert reason.startswith("needs "), title
 
 
-def test_compared_scenarios_leave_out_pending_ones() -> None:
+def test_compared_scenarios_leave_out_pending_and_refused_ones() -> None:
     compared = {s.title for s in parity.compared_scenarios()}
     assert compared.isdisjoint(parity.PENDING)
-    assert compared | set(parity.PENDING) == {s.title for s in PARITY_SCENARIOS}
-    stanzas = parse(parity.inputs_conf(parity.compared_scenarios())).sections()
-    assert stanzas == [f"web_ping://{s.title}" for s in parity.compared_scenarios()]
+    assert compared.isdisjoint(parity.REFUSED)
+    assert set(parity.PENDING).isdisjoint(parity.REFUSED)
+    everything = compared | set(parity.PENDING) | set(parity.REFUSED)
+    assert everything == {s.title for s in PARITY_SCENARIOS}
+
+
+def test_config_app_has_compared_and_refused_scenarios() -> None:
+    configured = parity.configured_scenarios()
+    stanzas = parse(parity.inputs_conf(configured)).sections()
+    assert stanzas == [f"web_ping://{s.title}" for s in configured]
+    titles = {s.title for s in configured}
+    assert titles == {s.title for s in parity.compared_scenarios()} | set(
+        parity.REFUSED
+    )
+
+
+def test_refused_scenarios_are_refused_by_the_settings() -> None:
+    for title, message in parity.REFUSED.items():
+        scenario = parity.by_title()[title]
+        with pytest.raises(ConfigError, match=message):
+            _ = build_settings(f"web_ping://{title}", scenario.stanza())
+
+
+def test_compared_request_logs_belong_to_compared_scenarios() -> None:
+    compared = {s.title for s in parity.compared_scenarios()}
+    assert set(parity.REQUESTS_COMPARED) <= compared

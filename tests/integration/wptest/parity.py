@@ -210,16 +210,12 @@ _CONTENT = "needs content checks"
 _BODY = "needs the response body event"
 _AUTH = "needs HTTP authentication with passwords from storage/passwords"
 _PROXY = "needs proxy configuration from website_monitoring.conf"
-_URL = "needs URL encoding of spaces and non-ASCII characters"
 
 PENDING: Mapping[str, str] = MappingProxyType(
     {
         **dict.fromkeys((f"content-{case}" for case in CONTENT_CASES), _CONTENT),
         **dict.fromkeys(("match-yes", "match-no"), _CONTENT),
-        **dict.fromkeys(
-            ("gzip", "gzip-forced", "deflate", "deflate-raw"),
-            "needs content checks and gzip/deflate decoding",
-        ),
+        **dict.fromkeys(("gzip", "gzip-forced", "deflate", "deflate-raw"), _CONTENT),
         "headers": "needs response headers in the event",
         **dict.fromkeys(("body-big", "body-small", "body-lines", "body-binary"), _BODY),
         **dict.fromkeys(
@@ -236,19 +232,44 @@ PENDING: Mapping[str, str] = MappingProxyType(
         **dict.fromkeys(
             ("proxy-plain", "proxy-https", "proxy-auth", "proxy-ignore"), _PROXY
         ),
-        "cookie-redirect": "needs cookies kept across redirects",
-        "idn-eszett": "needs IDNA 2008 host names",
-        **dict.fromkeys(("path-unicode", "path-space"), _URL),
     }
 )
 """Scenarios website-ping cannot match yet, with the missing feature. They are
 skipped by the parity test and left out of its config app."""
 
 
+REFUSED: Mapping[str, str] = MappingProxyType(
+    {
+        "idn-eszett": "ASCII form depends on the IDNA version",
+    }
+)
+"""Scenarios website-ping refuses on purpose, with text of the ERROR it logs: the
+stanza is not run, so there is no event and no request to compare."""
+
+REQUESTS_COMPARED: tuple[str, ...] = (
+    "request-headers",
+    "cookie-redirect",
+    "idn-host",
+    "path-unicode",
+    "path-space",
+)
+"""Compared scenarios whose target request log is compared with the fixture too:
+header names, order and values, cookies, Host and the request line."""
+
+
 def compared_scenarios(
     scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
 ) -> tuple[ParityScenario, ...]:
     """The scenarios the parity test compares with their fixtures."""
+    return tuple(
+        s for s in scenarios if s.title not in PENDING and s.title not in REFUSED
+    )
+
+
+def configured_scenarios(
+    scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
+) -> tuple[ParityScenario, ...]:
+    """The scenarios in the parity config app: the compared and the refused ones."""
     return tuple(s for s in scenarios if s.title not in PENDING)
 
 

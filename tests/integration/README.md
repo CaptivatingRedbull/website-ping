@@ -67,7 +67,12 @@ The parity stack (`-m parity`) runs website-ping with the scenarios of
 of Website Monitoring 2.9.7 in `tests/golden/2.9.7/` (`wptest/golden.py`,
 allowed differences in `ALLOWED_DIFFERENCES`). Scenarios in `parity.PENDING`
 need a feature website-ping does not have yet: they are skipped with that
-feature as the reason and left out of the stack's config.
+feature as the reason and left out of the stack's config. Scenarios in
+`parity.REFUSED` are refused by website-ping on purpose: they stay in the
+config and the test expects their ERROR in `website_ping.log`, no event and no
+request. For the scenarios in `parity.REQUESTS_COMPARED` the target's request
+log is compared with the fixture as well (`golden.compare_requests`, allowed
+differences in `REQUEST_ALLOWED`).
 
 ## Isolation rules
 

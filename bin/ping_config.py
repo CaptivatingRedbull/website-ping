@@ -12,6 +12,7 @@ from typing import TypedDict
 from urllib.parse import urlsplit
 
 from logger import LOG_LEVELS
+from wp_url import HostNameError, prepare_url
 from wp_version import APP_VERSION
 
 DEFAULT_USER_AGENT = f"Splunk Website Ping/{APP_VERSION}"
@@ -161,6 +162,10 @@ def _parse_url(stanza: str, raw: str) -> str:
         raise ConfigError(f"url must use http or https, got {_shown(url)}")
     if not parts.hostname:
         raise ConfigError(f"url has no host name, got {_shown(url)}")
+    try:
+        _ = prepare_url(url)
+    except HostNameError as exc:
+        raise ConfigError(f"url: {exc}") from None
     return url
 
 

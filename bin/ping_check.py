@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import errno
 import http.client
+import http.cookiejar
 import socket
 import time
 import urllib.error
@@ -11,13 +12,16 @@ from typing import Protocol, cast
 
 from logger import stanza_logger
 from ping_config import UNLIMITED_REDIRECTS, Settings
+from wp_content import MAX_BODY_BYTES, BodyDecoder, ContentDecodingError, encoding_of
 from wp_deadline import Deadline
 from wp_http import (
     DeadlineHTTPHandler,
     DeadlineHTTPSHandler,
     DeadlineSockets,
     LimitedRedirectHandler,
+    request_headers,
 )
+from wp_url import HostNameError, prepare_url
 
 CHUNK_SIZE = 64 * 1024
 MAX_ERROR_LENGTH = 200
@@ -65,20 +69,32 @@ class _Body(Protocol):
     def read1(self, n: int = ..., /) -> bytes: ...
 
 
-def _drain(response: _Body, deadline: Deadline, sockets: DeadlineSockets) -> bool:
-    """Read and discard the body. False if the deadline passed or expired first."""
-    while True:
+def _read_body(
+    response: _Body,
+    content_encoding: str | None,
+    deadline: Deadline,
+    sockets: DeadlineSockets,
+) -> BodyDecoder | None:
+    """Read and decode the body, up to MAX_BODY_BYTES decoded. None if the
+    deadline passed or expired first. Raises ContentDecodingError."""
+    decoder = BodyDecoder(content_encoding)
+    while not decoder.full:
         if deadline.passed():
-            return False
+            return None
         sockets.tighten()
         try:
             chunk = response.read1(CHUNK_SIZE)
         except (socket.timeout, TimeoutError):
-            return False
+            return None
         if not chunk:
             # Expiry shuts the socket down, which a body without a length would
             # otherwise take for its regular end.
-            return not deadline.expired
+            if deadline.expired:
+                return None
+            decoder.finish()
+            break
+        decoder.feed(chunk)
+    return decoder
 
 
 def _fetch(
@@ -87,16 +103,20 @@ def _fetch(
     timeout: int,
     deadline: Deadline,
     sockets: DeadlineSockets,
-) -> tuple[int, bool]:
-    """Return (status code, body completely read). Transport errors propagate."""
+) -> tuple[int, BodyDecoder | None]:
+    """Return (status code, decoded body or None if it did not arrive in time).
+    Transport and decoding errors propagate."""
     try:
         response = cast(http.client.HTTPResponse, opener.open(request, timeout=timeout))
         with response:
-            return response.status, _drain(response, deadline, sockets)
+            encoding = encoding_of(response.headers.get_all("Content-Encoding"))
+            return response.status, _read_body(response, encoding, deadline, sockets)
     except urllib.error.HTTPError as exc:
         with exc:
+            encoding = encoding_of(exc.headers.get_all("Content-Encoding"))
             # HTTPError hands attribute access on to the response it wraps.
-            return exc.code, _drain(cast(_Body, exc), deadline, sockets)
+            body = _read_body(cast(_Body, exc), encoding, deadline, sockets)
+            return exc.code, body
 
 
 def _is_timeout(reason: object) -> bool:
@@ -137,9 +157,9 @@ def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResu
         DeadlineHTTPHandler(sockets),
         DeadlineHTTPSHandler(sockets),
         redirects,
-    )
-    request = urllib.request.Request(
-        settings["url"], headers={"User-Agent": settings["user_agent"]}, method="GET"
+        # A new jar per check: a cookie set during one check's redirects is sent
+        # on its later hops, never by another check or stanza.
+        urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
     )
 
     def result(
@@ -159,7 +179,12 @@ def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResu
         )
 
     try:
-        code, complete = _fetch(opener, request, timeout, deadline, sockets)
+        request = urllib.request.Request(
+            prepare_url(settings["url"]),
+            headers=request_headers(settings["user_agent"]),
+            method="GET",
+        )
+        code, body = _fetch(opener, request, timeout, deadline, sockets)
     except Exception as exc:  # noqa: BLE001 - a check must always produce an event
         # After expiry the sockets were shut down under the check: whatever that
         # raised (reset, TLS or protocol error) means the time ran out.
@@ -169,13 +194,22 @@ def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResu
             reason = exc.reason
             detail = reason if isinstance(reason, BaseException) else exc
             return result(None, error=_describe(detail))
-        if isinstance(exc, (OSError, http.client.HTTPException)):
+        if isinstance(
+            exc,
+            (OSError, http.client.HTTPException, HostNameError, ContentDecodingError),
+        ):
             return result(None, error=_describe(exc))
         slog.exception("unexpected error during check")
         return result(None, error="unexpected " + _describe(exc))
-    if not complete:
+    if body is None:
         slog.info("status %d arrived, but the body did not within the timeout", code)
         return result(None, timed_out=True)
+    if body.full:
+        slog.warning(
+            "body larger than %d MiB; only the first %d MiB are used",
+            MAX_BODY_BYTES >> 20,
+            MAX_BODY_BYTES >> 20,
+        )
     if redirects.limit_reached and 300 <= code < 400:
         return result(
             None,

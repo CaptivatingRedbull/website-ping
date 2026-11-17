@@ -12,6 +12,7 @@ import re
 import time
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Union, cast
 
@@ -40,6 +41,7 @@ UNSET_HOST = "$decideOnStartup"
 """The host splunkd passes to an input whose stanza sets none; 2.9.7 wrote it as is."""
 INPUT_TIME = "event time set by the input instead of extracted from the text"
 CONTENT_PENDING = "needs content checks"
+ONE_CONNECTION = "one connection per request"
 
 ALLOWED_DIFFERENCES: Mapping[str, Mapping[str, str]] = {
     # title -> {field -> reason}; "*" as title applies to every scenario,
@@ -49,6 +51,10 @@ ALLOWED_DIFFERENCES: Mapping[str, Mapping[str, str]] = {
         "content_md5": CONTENT_PENDING,
         "content_sha224": CONTENT_PENDING,
         "content_size": CONTENT_PENDING,
+        # Response headers that follow the request's Connection header.
+        "header_Connection": ONE_CONNECTION,
+        "header_Keep-Alive": ONE_CONNECTION,
+        "header_Keep_Alive": ONE_CONNECTION,
     },
     "date-in-title": {"_time": INPUT_TIME, "timestamp": INPUT_TIME},
     "body-lines": {"_time": INPUT_TIME, "timestamp": INPUT_TIME},
@@ -57,6 +63,11 @@ ALLOWED_DIFFERENCES: Mapping[str, Mapping[str, str]] = {
     "ntlm-offered": {ANY_FIELD: "NTLM not supported in website-ping"},
     # Content scenarios whose decoding relied on chardet: add after the capture,
     # one entry per title whose hashes differ without charset detection.
+}
+REQUEST_ALLOWED: Mapping[str, str] = {
+    # TargetRequest field -> reason, for every compared request.
+    "connection": ONE_CONNECTION,
+    "user_agent": "the default user agent names website-ping",
 }
 
 EXPORT_FIELDS = "wptest_raw wptest_time wptest_indextime wptest_cd wptest_server"
@@ -535,6 +546,32 @@ def diff_field(diff: FieldDiff) -> str:
 
 def failing(diffs: Sequence[FieldDiff]) -> list[FieldDiff]:
     return [diff for diff in diffs if not diff.allowed]
+
+
+def compare_requests(
+    golden: Sequence[TargetRequest],
+    actual: Sequence[TargetRequest],
+    allowed: Collection[str] = (),
+) -> list[FieldDiff]:
+    """Every difference between two request logs, field by field, prefixed with
+    the request's position, such as "request 1: header_names". Differences on
+    allowed fields are returned with allowed=True."""
+    diffs: list[FieldDiff] = []
+    if len(golden) != len(actual):
+        diffs.append(FieldDiff("request count", str(len(golden)), str(len(actual))))
+    for index, (expected, got) in enumerate(zip(golden, actual)):
+        for item in dataclass_fields(TargetRequest):
+            want, have = getattr(expected, item.name), getattr(got, item.name)
+            if want != have:
+                diffs.append(
+                    FieldDiff(
+                        f"request {index}: {item.name}",
+                        json.dumps(want, ensure_ascii=False),
+                        json.dumps(have, ensure_ascii=False),
+                        allowed=item.name in allowed,
+                    )
+                )
+    return diffs
 
 
 def compare_capture(golden: Capture, actual: Capture) -> list[FieldDiff]:

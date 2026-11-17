@@ -6,6 +6,12 @@ url = <string>
 * The URL to check. Must use http or https and contain a host name.
 * Must not contain a user name or password (user:password@host); such a stanza is
   rejected.
+* A host name with non-ASCII letters is sent in its ASCII form (punycode). A host
+  name containing ß, ς, joiner characters or full-width letters is rejected,
+  because its ASCII form depends on the IDNA version; write such a host in its
+  ASCII form (xn--...).
+* Non-ASCII characters and spaces in the path and query are sent percent-encoded
+  as UTF-8. The url field of the event keeps the text as written here.
 * Required.
 
 interval = <string>

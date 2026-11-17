@@ -15,12 +15,45 @@ from urllib.parse import urlsplit
 
 from compat import override
 from wp_deadline import Deadline
+from wp_url import HostNameError, redirect_url
 
 REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
 FOLLOWED_METHODS = frozenset({"GET", "HEAD"})
 _NOT_COPIED = frozenset({"content-length", "content-type", "host"})
 MIN_SOCKET_TIMEOUT = 0.01
 """A socket timeout of 0 would switch the socket to non-blocking mode."""
+
+ACCEPT_ENCODING = "gzip, deflate"
+ACCEPT = "*/*"
+_FIRST_HEADERS = ("Host", "User-agent", "Accept-encoding", "Accept", "Connection")
+"""In urllib's spelling (str.capitalize); http.client sends them title-cased."""
+
+
+def request_headers(user_agent: str) -> dict[str, str]:
+    """The headers every request of a check carries, besides Host and Connection,
+    which urllib adds to each hop."""
+    return {
+        "User-Agent": user_agent,
+        "Accept-Encoding": ACCEPT_ENCODING,
+        "Accept": ACCEPT,
+    }
+
+
+def order_headers(req: urllib.request.Request) -> None:
+    """Fix the order the headers go out in: Host, User-Agent, Accept-Encoding,
+    Accept, Connection, the request's other headers, then the headers added for
+    this hop only (Cookie, Authorization), the order Website Monitoring sent.
+
+    urllib sends the hop-only headers first and then sets Connection: close,
+    which keeps the position of a key that is already there. So all headers go
+    into the hop-only ones in the wanted order; req.headers stays as it is,
+    since a redirect copies those.
+    """
+    values = {**req.headers, **req.unredirected_hdrs, "Connection": "close"}
+    ordered = {name: values.pop(name) for name in _FIRST_HEADERS if name in values}
+    ordered.update((name, values.pop(name)) for name in req.headers if name in values)
+    ordered.update(values)
+    req.unredirected_hdrs = ordered
 
 
 class LimitedRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -59,8 +92,14 @@ class LimitedRedirectHandler(urllib.request.HTTPRedirectHandler):
         if self.followed >= self.limit:
             self.limit_reached = True
             return None
+        location = headers.get("Location") or headers.get("URI") or newurl
+        try:
+            target = redirect_url(req.full_url, location)
+        except HostNameError:
+            fp.close()
+            raise
         self.followed += 1
-        same_host = urlsplit(req.full_url).hostname == urlsplit(newurl).hostname
+        same_host = urlsplit(req.full_url).hostname == urlsplit(target).hostname
         kept = {
             name: value
             for name, value in req.headers.items()
@@ -70,7 +109,7 @@ class LimitedRedirectHandler(urllib.request.HTTPRedirectHandler):
         # GET and HEAD carry no body, so 301/302/303 (body dropped) and 307/308
         # (method and body kept) all repeat the method without a body.
         return urllib.request.Request(
-            newurl,
+            target,
             headers=kept,
             origin_req_host=req.origin_req_host,
             unverifiable=True,
@@ -202,6 +241,7 @@ class DeadlineHTTPHandler(urllib.request.HTTPHandler):
 
     @override
     def http_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        order_headers(req)
         return self.do_open(self._connection, req)
 
     def _connection(
@@ -227,8 +267,8 @@ class DeadlineHTTPSHandler(urllib.request.HTTPSHandler):
         self.sockets: DeadlineSockets = sockets
         self.ssl_context: ssl.SSLContext | None = context
 
-    @override
     def https_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        order_headers(req)
         return self.do_open(self._connection, req)
 
     def _connection(

@@ -71,6 +71,8 @@ def test_unlimited_redirects_constant() -> None:
         "http://example.com",
         "https://example.com:8443/a b?q=1",
         "  http://target:8080/x  ",
+        "http://münchen.test:8080/done/idn-host",
+        "http://target:8080/path/Müller?q=München",
     ],
 )
 def test_url_accepted(url: str) -> None:
@@ -117,6 +119,14 @@ def test_url_without_scheme_and_at_sign_is_not_echoed() -> None:
     with pytest.raises(ConfigError) as info:
         _ = build(url=f"user:{SECRET}@example.com")
     assert SECRET not in str(info.value)
+
+
+def test_url_with_version_dependent_host_rejected() -> None:
+    with pytest.raises(ConfigError) as info:
+        _ = build(url="http://straße.test:8080/")
+    message = str(info.value)
+    assert message.startswith("url: host name 'straße.test'")
+    assert "xn--" in message
 
 
 def test_at_sign_in_path_or_query_is_not_userinfo() -> None:

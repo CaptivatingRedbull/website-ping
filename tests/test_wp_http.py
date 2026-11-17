@@ -23,7 +23,10 @@ from wp_http import (
     DeadlineHTTPSHandler,
     DeadlineSockets,
     LimitedRedirectHandler,
+    order_headers,
+    request_headers,
 )
+from wp_url import HostNameError
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,11 @@ class RecordingHandler(BaseHTTPRequestHandler):
         elif parts[0] == "to-localhost":
             port = cast(Recorder, self.server).port
             self._redirect(302, f"http://localhost:{port}/done")
+        elif parts[0] == "to-unicode":
+            # UTF-8 bytes; send_header writes the value as Latin-1.
+            self._redirect(302, "/M\xc3\xbcller")
+        elif parts[0] == "to-eszett":
+            self._redirect(302, "http://stra\xc3\x9fe.test/")
         elif parts[0] == "no-location":
             self.send_response(302)
             self.send_header("Content-Length", "0")
@@ -182,6 +190,18 @@ def test_authorization_dropped_on_another_host(server: Recorder) -> None:
     assert [s.authorization for s in server.seen] == ["Basic eDp5", ""]
 
 
+def test_location_is_percent_encoded_as_utf8(server: Recorder) -> None:
+    status, _ = fetch(server, "/to-unicode", 5)
+    assert status == 200
+    assert [s.path for s in server.seen] == ["/to-unicode", "/M%C3%BCller"]
+
+
+def test_location_with_refused_host_raises(server: Recorder) -> None:
+    with pytest.raises(HostNameError):
+        _ = fetch(server, "/to-eszett", 5)
+    assert len(server.seen) == 1
+
+
 def test_new_request_copies_headers_except_content_and_host() -> None:
     handler = LimitedRedirectHandler(5)
     original = urllib.request.Request(
@@ -207,6 +227,35 @@ def test_new_request_copies_headers_except_content_and_host() -> None:
     assert new.unverifiable and new.origin_req_host == original.origin_req_host
     assert sorted(new.header_items()) == [("User-agent", "ua"), ("X-custom", "1")]
     assert new.data is None
+
+
+def test_request_headers() -> None:
+    assert list(request_headers("ua").items()) == [
+        ("User-Agent", "ua"),
+        ("Accept-Encoding", "gzip, deflate"),
+        ("Accept", "*/*"),
+    ]
+
+
+def test_order_headers_puts_hop_only_headers_last() -> None:
+    headers = {"X-Custom": "1", **request_headers("ua")}
+    request = urllib.request.Request("http://a.test/", headers=headers)
+    request.add_unredirected_header("Cookie", "a=1")
+    request.add_unredirected_header("Host", "a.test")
+    request.add_unredirected_header("Authorization", "Basic eDp5")
+    before = dict(request.headers)
+    order_headers(request)
+    assert list(request.unredirected_hdrs.items()) == [
+        ("Host", "a.test"),
+        ("User-agent", "ua"),
+        ("Accept-encoding", "gzip, deflate"),
+        ("Accept", "*/*"),
+        ("Connection", "close"),
+        ("X-custom", "1"),
+        ("Cookie", "a=1"),
+        ("Authorization", "Basic eDp5"),
+    ]
+    assert request.headers == before
 
 
 def test_other_methods_are_not_followed() -> None:

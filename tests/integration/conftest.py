@@ -531,7 +531,7 @@ def setup_golden(stack: Stack, manager: StackManager) -> None:
 
 def setup_parity(stack: Stack, manager: StackManager) -> None:
     """Standalone compose file with website-ping and the parity scenarios it can
-    already match, generated from wptest/parity.py."""
+    already match or refuses on purpose, generated from wptest/parity.py."""
     _start(stack, manager)
     _deliver_helpers(stack, manager, ("so1",))
     _probe(stack, manager, ("so1",))
@@ -539,7 +539,7 @@ def setup_parity(stack: Stack, manager: StackManager) -> None:
         APPS_DIR / "parity",
         manager.workdir / f"website_ping_inputs-parity-{stack.runtime.id}.tar.gz",
         extra={
-            "default/inputs.conf": parity.inputs_conf(parity.compared_scenarios()),
+            "default/inputs.conf": parity.inputs_conf(parity.configured_scenarios()),
             **install.python_override(stack.runtime),
         },
     )

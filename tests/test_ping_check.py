@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import dataclasses
 import errno
+import gzip
 import json
 import socket
 import ssl
@@ -16,8 +18,9 @@ import ping_check
 import pytest
 from compat import override
 from ping_check import check_url
-from ping_config import Settings, build_settings
+from ping_config import DEFAULT_USER_AGENT, Settings, build_settings
 from target import server
+from wp_content import MAX_BODY_BYTES, BodyDecoder
 from wp_deadline import Deadline
 from wptest import golden, legacy, parity
 
@@ -37,6 +40,25 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Location", f"/redir/{hops - 1}")
                 self.send_header("Content-Length", "0")
                 self.end_headers()
+        elif self.path.startswith("/gzip/"):
+            body = gzip.compress(b"compressed body")
+            kind = self.path.rsplit("/", 1)[1]
+            if kind == "truncated":
+                body = body[:-12]
+            elif kind == "corrupt":
+                body = b"\x1f\x8b\x08\x00" + b"x" * 20
+            elif kind == "huge":
+                body = gzip.compress(bytes(MAX_BODY_BYTES + 1024), compresslevel=1)
+            self.send_response(200 if kind != "missing" else 404)
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            _ = self.wfile.write(body)
+        elif self.path == "/to-eszett":
+            self.send_response(302)
+            self.send_header("Location", "http://stra\xc3\x9fe.test/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
         elif self.path == "/hang":
             time.sleep(3)
             self._send(200, b"late")
@@ -117,6 +139,35 @@ def test_zero_redirects_stops_at_the_first_redirect(base_url: str) -> None:
     assert r.error == "redirect limit of 0 reached"
 
 
+def test_redirect_to_refused_host_is_an_error(base_url: str) -> None:
+    r = check_url(make(base_url + "/to-eszett"))
+    assert (r.response_code, r.timed_out) == (None, False)
+    assert r.error.startswith("HostNameError: host name 'straße.test'")
+
+
+@pytest.mark.parametrize(
+    ("kind", "code"), [("ok", 200), ("missing", 404), ("huge", 200)]
+)
+def test_compressed_body_is_read(base_url: str, kind: str, code: int) -> None:
+    r = check_url(make(f"{base_url}/gzip/{kind}"))
+    assert (r.response_code, r.timed_out, r.error) == (code, False, "")
+
+
+@pytest.mark.parametrize(
+    ("kind", "message"),
+    [
+        ("truncated", "the body ends before its gzip stream does"),
+        ("corrupt", "cannot decode the gzip body"),
+    ],
+)
+def test_body_that_does_not_decode_is_no_response(
+    base_url: str, kind: str, message: str
+) -> None:
+    r = check_url(make(f"{base_url}/gzip/{kind}"))
+    assert (r.response_code, r.timed_out) == (None, False)
+    assert r.error.startswith(f"ContentDecodingError: {message}")
+
+
 def test_timeout(base_url: str) -> None:
     r = check_url(make(base_url + "/hang", timeout="1"))
     assert r.timed_out and r.response_code is None and r.error == ""
@@ -143,8 +194,8 @@ def test_unresolvable_host() -> None:
     assert r.response_code is None and r.error  # .invalid never resolves
 
 
-def _raise(exc: BaseException) -> Callable[..., tuple[int, bool]]:
-    def fetch(*_args: object) -> tuple[int, bool]:
+def _raise(exc: BaseException) -> Callable[..., tuple[int, BodyDecoder | None]]:
+    def fetch(*_args: object) -> tuple[int, BodyDecoder | None]:
         raise exc
 
     return fetch
@@ -365,3 +416,74 @@ def test_only_max_redirects_limits_redirects(
     assert r.exceeded_redirects == (code is None)
     if code is None:
         assert r.error == f"redirect limit of {limit} reached"
+
+
+@pytest.mark.parametrize("title", ["path-unicode", "path-space"])
+def test_request_line_matches_the_fixture(
+    target_base: str, capsys: pytest.CaptureFixture[str], title: str
+) -> None:
+    scenario = parity.by_title()[title]
+    capture = golden.read_capture(GOLDEN_DIR, title)
+    url = scenario.url.replace(parity.T, target_base)
+    _ = capsys.readouterr()
+    r = check_url(make(url, **scenario.settings))
+    assert r.response_code == 200
+    logged = [
+        str(record["request_line"]) for record in target_requests(capsys, scenario)
+    ]
+    assert logged == [request.request_line for request in capture.requests]
+
+
+# ---- request headers and cookies, compared with the fixtures ------------------
+
+
+def comparable(request: golden.TargetRequest) -> golden.TargetRequest:
+    """Without what differs by test setup (the target's address) or by design
+    (Connection: one connection per request; the default user agent)."""
+    return dataclasses.replace(request, port=0, host="", connection="", user_agent="")
+
+
+@pytest.mark.parametrize(
+    "title", ["request-headers", "redirect-302", "cookie-redirect"]
+)
+def test_request_headers_match_the_fixture(
+    target_base: str, capsys: pytest.CaptureFixture[str], title: str
+) -> None:
+    scenario = parity.by_title()[title]
+    capture = golden.read_capture(GOLDEN_DIR, title)
+    url = scenario.url.replace(parity.T, target_base)
+    _ = capsys.readouterr()
+    r = check_url(make(url, **scenario.settings))
+    assert r.response_code == 200
+    sent = [
+        golden.target_request(record) for record in target_requests(capsys, scenario)
+    ]
+    assert [comparable(s) for s in sent] == [comparable(e) for e in capture.requests]
+    assert {(s.connection, s.user_agent) for s in sent} == {
+        ("close", DEFAULT_USER_AGENT)
+    }
+
+
+def test_cookie_jar_is_new_for_every_check(
+    target_base: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    scenario = parity.by_title()["cookie-redirect"]
+    url = scenario.url.replace(parity.T, target_base)
+    _ = capsys.readouterr()
+    for _check in range(2):
+        assert check_url(make(url)).response_code == 200
+    cookies = [str(record["cookie"]) for record in target_requests(capsys, scenario)]
+    assert cookies == ["", "wptest_session", "", "wptest_session"]
+
+
+@pytest.mark.parametrize("title", ["gzip", "gzip-forced", "deflate", "deflate-raw"])
+def test_encoded_routes_are_decoded(
+    target_base: str, capsys: pytest.CaptureFixture[str], title: str
+) -> None:
+    scenario = parity.by_title()[title]
+    url = scenario.url.replace(parity.T, target_base)
+    _ = capsys.readouterr()
+    r = check_url(make(url, **scenario.settings))
+    assert (r.response_code, r.error) == (200, "")
+    (sent,) = target_requests(capsys, scenario)
+    assert sent["accept_encoding"] == "gzip, deflate"
