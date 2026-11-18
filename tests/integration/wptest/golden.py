@@ -40,7 +40,9 @@ ANY_FIELD = "*"
 UNSET_HOST = "$decideOnStartup"
 """The host splunkd passes to an input whose stanza sets none; 2.9.7 wrote it as is."""
 INPUT_TIME = "event time set by the input instead of extracted from the text"
-CONTENT_PENDING = "needs content checks"
+GUESSED_CHARSET = (
+    "charset guessed by 2.9.7 (Windows-1253 for these bytes), decoded as UTF-8"
+)
 ONE_CONNECTION = "one connection per request"
 
 ALLOWED_DIFFERENCES: Mapping[str, Mapping[str, str]] = {
@@ -48,9 +50,6 @@ ALLOWED_DIFFERENCES: Mapping[str, Mapping[str, str]] = {
     # "*" as field allows every field of that scenario.
     "*": {
         "error": "new in website-ping (additive)",
-        "content_md5": CONTENT_PENDING,
-        "content_sha224": CONTENT_PENDING,
-        "content_size": CONTENT_PENDING,
         # Response headers that follow the request's Connection header.
         "header_Connection": ONE_CONNECTION,
         "header_Keep-Alive": ONE_CONNECTION,
@@ -61,8 +60,16 @@ ALLOWED_DIFFERENCES: Mapping[str, Mapping[str, str]] = {
     "slow-body": {ANY_FIELD: "timeout is a total deadline in website-ping"},
     "trickled-body": {ANY_FIELD: "timeout is a total deadline in website-ping"},
     "ntlm-offered": {ANY_FIELD: "NTLM not supported in website-ping"},
-    # Content scenarios whose decoding relied on chardet: add after the capture,
-    # one entry per title whose hashes differ without charset detection.
+    # A body without a charset in Content-Type and not of a text type: 2.9.7 let
+    # chardet guess the charset, website-ping decodes UTF-8. The size stays the
+    # same here (one character per byte either way).
+    "content-binary": {
+        "content_md5": GUESSED_CHARSET,
+        "content_sha224": GUESSED_CHARSET,
+    },
+    # The body event's text: 2.9.7 wrote \x0b and \x1f into the XML stream and
+    # Splunk indexed them; website-ping removes characters XML 1.0 forbids.
+    "body-binary": {"_raw": "characters XML does not allow are removed"},
 }
 REQUEST_ALLOWED: Mapping[str, str] = {
     # TargetRequest field -> reason, for every compared request.

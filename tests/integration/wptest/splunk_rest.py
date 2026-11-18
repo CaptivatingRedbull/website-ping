@@ -45,7 +45,8 @@ def parse_results(text: str) -> list[dict[str, str]]:
 
 EVENT_FIELDS = (
     "wptest_time title url response_code total_time request_time timed_out"
-    " exceeded_redirects error sourcetype index source host _raw"
+    " exceeded_redirects has_expected_string error sourcetype index source host"
+    " _raw"
 )
 
 
@@ -55,6 +56,14 @@ def events_query(title: str, since: float, extra: str = "") -> str:
         f'search index=main sourcetype=web_ping title="{title}"'
         f" _index_earliest={int(since)} {extra}"
         f" | eval wptest_time=_time | table {EVENT_FIELDS}"
+    )
+
+
+def body_count_query(title: str, since: float) -> str:
+    """The number of a stanza's body events indexed since the mark."""
+    return (
+        'search index=main sourcetype="web_ping:response"'
+        f' source="web_ping://{title}" _index_earliest={int(since)} | stats count'
     )
 
 

@@ -9,11 +9,22 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from email.message import Message
 from typing import Protocol, cast
 
 from logger import stanza_logger
-from ping_config import UNLIMITED_REDIRECTS
-from wp_content import MAX_BODY_BYTES, BodyDecoder, ContentDecodingError, encoding_of
+from ping_config import UNLIMITED_REDIRECTS, Settings
+from wp_content import (
+    MAX_BODY_BYTES,
+    BodyDecoder,
+    ContentDecodingError,
+    ContentHashes,
+    content_hashes,
+    decode_body,
+    header_fields,
+    header_value,
+    truncate_body,
+)
 from wp_context import CheckContext
 from wp_deadline import Deadline
 from wp_http import (
@@ -82,6 +93,35 @@ class CheckResult:
     """Response body for the body event, when return_body is set."""
 
 
+@dataclass(frozen=True)
+class ResponseContent:
+    """What a check takes from a complete response besides its status."""
+
+    hashes: ContentHashes
+    has_expected_string: bool | None
+    """None when the stanza sets no should_contain_string."""
+    headers: tuple[tuple[str, str], ...] | None
+    """Only with return_headers."""
+    body: str | None
+    """Text of the body event; only with return_body and a limit other than 0."""
+
+
+def response_content(
+    settings: Settings, body_limit: int, headers: Message, raw: bytes | bytearray
+) -> ResponseContent:
+    """Decode and hash the body (the decoded body after any Content-Encoding);
+    take the expected string, the headers and the body event's text only as far
+    as the stanza asks for them. body_limit is max_response_body_length."""
+    text = decode_body(raw, header_value(headers, "Content-Type"))
+    needle = settings["should_contain_string"]
+    return ResponseContent(
+        hashes=content_hashes(text),
+        has_expected_string=None if needle is None else needle in text,
+        headers=header_fields(headers) if settings["return_headers"] else None,
+        body=truncate_body(text, body_limit) if settings["return_body"] else None,
+    )
+
+
 class _Body(Protocol):
     def read1(self, n: int = ..., /) -> bytes: ...
 
@@ -114,26 +154,35 @@ def _read_body(
     return decoder
 
 
+@dataclass(frozen=True)
+class _Response:
+    status: int
+    headers: Message
+    body: BodyDecoder | None
+    """None if the body did not arrive in time."""
+
+
 def _fetch(
     opener: urllib.request.OpenerDirector,
     request: urllib.request.Request,
     timeout: int,
     deadline: Deadline,
     sockets: DeadlineSockets,
-) -> tuple[int, BodyDecoder | None]:
-    """Return (status code, decoded body or None if it did not arrive in time).
-    Transport and decoding errors propagate."""
+) -> _Response:
+    """The final response (after redirects) with its decoded body. Transport and
+    decoding errors propagate."""
     try:
         response = cast(http.client.HTTPResponse, opener.open(request, timeout=timeout))
         with response:
-            encoding = encoding_of(response.headers.get_all("Content-Encoding"))
-            return response.status, _read_body(response, encoding, deadline, sockets)
+            encoding = header_value(response.headers, "Content-Encoding")
+            body = _read_body(response, encoding, deadline, sockets)
+            return _Response(response.status, response.headers, body)
     except urllib.error.HTTPError as exc:
         with exc:
-            encoding = encoding_of(exc.headers.get_all("Content-Encoding"))
+            encoding = header_value(exc.headers, "Content-Encoding")
             # HTTPError hands attribute access on to the response it wraps.
             body = _read_body(cast(_Body, exc), encoding, deadline, sockets)
-            return exc.code, body
+            return _Response(exc.code, exc.headers, body)
 
 
 def _is_timeout(reason: object) -> bool:
@@ -206,7 +255,9 @@ def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckR
         timed_out: bool = False,
         error: str = "",
         exceeded_redirects: bool = False,
+        content: ResponseContent | None = None,
     ) -> CheckResult:
+        hashes = content.hashes if content else None
         return CheckResult(
             response_code=code,
             elapsed=time.monotonic() - start,
@@ -214,7 +265,13 @@ def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckR
             timed_out=timed_out,
             error=error,
             exceeded_redirects=exceeded_redirects,
+            headers=content.headers if content else None,
+            content_md5=hashes.md5 if hashes else None,
+            content_sha224=hashes.sha224 if hashes else None,
+            content_size=hashes.size if hashes else None,
+            has_expected_string=content.has_expected_string if content else None,
             proxy=proxy_info(context.proxy),
+            body=content.body if content else None,
         )
 
     try:
@@ -223,7 +280,7 @@ def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckR
             headers=request_headers(settings["user_agent"]),
             method="GET",
         )
-        code, body = _fetch(opener, request, timeout, deadline, sockets)
+        response = _fetch(opener, request, timeout, deadline, sockets)
     except (TLSSetupError, UnsupportedProxyError) as exc:
         # Raised before the connection of a request opens: nothing was sent.
         return result(None, error=str(exc)[:MAX_ERROR_LENGTH])
@@ -243,6 +300,7 @@ def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckR
             return result(None, error=_describe(exc))
         slog.exception("unexpected error during check")
         return result(None, error="unexpected " + _describe(exc))
+    code, body = response.status, response.body
     if body is None:
         slog.info("status %d arrived, but the body did not within the timeout", code)
         return result(None, timed_out=True)
@@ -258,4 +316,8 @@ def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckR
             exceeded_redirects=True,
             error=f"redirect limit of {max_redirects} reached",
         )
-    return result(code)
+    # Decoding and hashing count towards the response time, as in 2.9.7.
+    content = response_content(
+        settings, context.max_response_body_length, response.headers, body.body
+    )
+    return result(code, content=content)

@@ -42,6 +42,10 @@ class Scenario:
     """Seconds the check may take: total_time for a response, otherwise from the
     target's log of the check's request to the event's _time (the check's end)."""
     exceeded_redirects: bool = False
+    has_expected_string: bool | None = None
+    """The value expected with should_contain_string set; None: field absent."""
+    body_event: bool = False
+    """Whether a web_ping:response event comes with each check event."""
 
     @property
     def counted(self) -> bool:
@@ -89,11 +93,13 @@ def compare(
     searched_at: float,
     requests: int | None = None,
     request_times: Sequence[float] = (),
+    body_events: int | None = None,
 ) -> list[FieldDiff]:
     """Every field that differs from the contract, comparing the newest event.
 
     request_times are the target's log times of the scenario's requests, needed
-    for max_duration when no response arrived."""
+    for max_duration when no response arrived. body_events is the number of the
+    stanza's web_ping:response events since the mark (None: not counted)."""
     diffs: list[FieldDiff] = []
     if scenario.counted and len(events) != 1:
         diffs.append(FieldDiff("event count", "exactly 1", str(len(events))))
@@ -120,6 +126,8 @@ def compare(
     expect("url", scenario.url)
     expect("timed_out", str(scenario.timed_out))
     expect("exceeded_redirects", "True" if scenario.exceeded_redirects else None)
+    found = scenario.has_expected_string
+    expect("has_expected_string", None if found is None else str(found).lower())
 
     if scenario.response_code is None:
         for name in ("response_code", "total_time", "request_time"):
@@ -171,6 +179,14 @@ def compare(
 
     if scenario.requests is not None and requests != scenario.requests:
         diffs.append(FieldDiff("requests", str(scenario.requests), str(requests)))
+    if body_events is not None and (body_events > 0) != scenario.body_event:
+        diffs.append(
+            FieldDiff(
+                "body event",
+                "present" if scenario.body_event else "absent",
+                f"{body_events} event(s)",
+            )
+        )
     return diffs
 
 

@@ -206,17 +206,10 @@ CONF_STANZAS: Mapping[str, Mapping[str, str]] = MappingProxyType(
         ),
     }
 )
-_CONTENT = "needs content checks"
-_BODY = "needs the response body event"
 _AUTH = "needs HTTP authentication with passwords from storage/passwords"
 
 PENDING: Mapping[str, str] = MappingProxyType(
     {
-        **dict.fromkeys((f"content-{case}" for case in CONTENT_CASES), _CONTENT),
-        **dict.fromkeys(("match-yes", "match-no"), _CONTENT),
-        **dict.fromkeys(("gzip", "gzip-forced", "deflate", "deflate-raw"), _CONTENT),
-        "headers": "needs response headers in the event",
-        **dict.fromkeys(("body-big", "body-small", "body-lines", "body-binary"), _BODY),
         **dict.fromkeys(
             (
                 "basic-plain",

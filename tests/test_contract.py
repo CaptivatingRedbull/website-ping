@@ -89,6 +89,45 @@ def test_exceeded_redirects_expected_or_absent() -> None:
     ]
 
 
+def test_has_expected_string_expected_or_absent() -> None:
+    matched = Scenario("t", URL, 15, 404, False, has_expected_string=True)
+    assert run(matched, answered(response_code="404", has_expected_string="true")) == []
+    diffs = run(matched, answered(response_code="404", has_expected_string="false"))
+    assert [(d.field, d.expected, d.actual) for d in diffs] == [
+        ("has_expected_string", '"true"', '"false"')
+    ]
+    assert fields_of(run(matched, answered(response_code="404"))) == [
+        "has_expected_string"
+    ]
+    plain = Scenario("t", URL, 15, 200, False)
+    assert fields_of(run(plain, answered(has_expected_string="true"))) == [
+        "has_expected_string"
+    ]
+
+
+def test_body_event_expected_or_absent() -> None:
+    def body_diffs(scenario: Scenario, count: int | None) -> list[FieldDiff]:
+        diffs = compare(
+            scenario,
+            [answered()],
+            host="so1",
+            mark=MARK,
+            searched_at=1020.0,
+            body_events=count,
+        )
+        return [d for d in diffs if d.field == "body event"]
+
+    with_body = Scenario("t", URL, 15, 200, False, body_event=True)
+    without = Scenario("t", URL, 15, 200, False)
+    assert body_diffs(with_body, 2) == []
+    assert body_diffs(without, 0) == []
+    assert body_diffs(with_body, None) == body_diffs(without, None) == []
+    (missing,) = body_diffs(with_body, 0)
+    assert (missing.expected, missing.actual) == ("present", "0 event(s)")
+    (extra,) = body_diffs(without, 1)
+    assert (extra.expected, extra.actual) == ("absent", "1 event(s)")
+
+
 def test_duration_of_an_answered_check_is_total_time() -> None:
     scenario = Scenario("t", URL, 15, 200, False, max_duration=7)
     assert run(scenario, answered(total_time="6999", request_time="6999")) == []

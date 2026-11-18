@@ -210,15 +210,17 @@ def test_allowed_fields_merge_global_and_title() -> None:
     allowed = golden.allowed_fields("status-200")
     assert set(allowed) == {
         "error",
-        "content_md5",
-        "content_sha224",
-        "content_size",
         "header_Connection",
         "header_Keep-Alive",
         "header_Keep_Alive",
     }
     assert golden.ANY_FIELD in golden.allowed_fields("ntlm-offered")
     assert {"_time", "timestamp"} <= set(golden.allowed_fields("date-in-title"))
+    assert set(golden.allowed_fields("content-binary")) >= {
+        "content_md5",
+        "content_sha224",
+    }
+    assert "_raw" in golden.allowed_fields("body-binary")
 
 
 def test_host_allowed_only_where_2_9_7_wrote_the_placeholder() -> None:

@@ -10,17 +10,19 @@ import threading
 import time
 import urllib.error
 from collections.abc import Callable, Iterator
+from email.message import Message
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import cast
+from typing import NoReturn, cast
 
 import ping_check
 import pytest
 from compat import override
-from ping_check import check_url
+from ping_check import check_url, response_content
 from ping_config import DEFAULT_USER_AGENT, build_settings
+from ping_events import escape_value
 from target import server
-from wp_content import MAX_BODY_BYTES, BodyDecoder
+from wp_content import MAX_BODY_BYTES
 from wp_context import CheckContext, make_context
 from wp_deadline import Deadline
 from wptest import golden, legacy, parity
@@ -152,6 +154,8 @@ def test_redirect_to_refused_host_is_an_error(base_url: str) -> None:
 def test_compressed_body_is_read(base_url: str, kind: str, code: int) -> None:
     r = check_url(make(f"{base_url}/gzip/{kind}"))
     assert (r.response_code, r.timed_out, r.error) == (code, False, "")
+    expected = MAX_BODY_BYTES if kind == "huge" else len("compressed body")
+    assert r.content_size == expected  # hashes cover the first 50 MiB only
 
 
 @pytest.mark.parametrize(
@@ -195,8 +199,8 @@ def test_unresolvable_host() -> None:
     assert r.response_code is None and r.error  # .invalid never resolves
 
 
-def _raise(exc: BaseException) -> Callable[..., tuple[int, BodyDecoder | None]]:
-    def fetch(*_args: object) -> tuple[int, BodyDecoder | None]:
+def _raise(exc: BaseException) -> Callable[..., NoReturn]:
+    def fetch(*_args: object) -> NoReturn:
         raise exc
 
     return fetch
@@ -484,3 +488,176 @@ def test_encoded_routes_are_decoded(
     assert (r.response_code, r.error) == (200, "")
     (sent,) = target_requests(capsys, scenario)
     assert sent["accept_encoding"] == "gzip, deflate"
+
+
+# ---- content, compared with the fixtures ---------------------------------------
+
+CONTENT_FIELDS = (
+    "content_md5",
+    "content_sha224",
+    "content_size",
+    "has_expected_string",
+)
+
+
+def check_fields(title: str) -> dict[str, golden.FieldValue]:
+    capture = golden.read_capture(GOLDEN_DIR, title)
+    checks = [e for e in capture.events if e.sourcetype == golden.CHECK_SOURCETYPE]
+    return dict(checks[-1].fields)
+
+
+def _content_titles() -> list[str]:
+    """Scenarios on the plain target whose fixture has content fields, without
+    authentication (stored passwords are not read in unit tests) and without an
+    allowed difference on every field."""
+    return [
+        s.title
+        for s in parity.PARITY_SCENARIOS
+        if s.url.startswith(parity.T)
+        and "username" not in s.settings
+        and golden.ANY_FIELD not in golden.allowed_fields(s.title)
+        and "content_md5" in check_fields(s.title)
+    ]
+
+
+def content_of(r: ping_check.CheckResult) -> dict[str, str | None]:
+    """The content fields of a result as the event writes them."""
+    size, found = r.content_size, r.has_expected_string
+    return {
+        "content_md5": r.content_md5,
+        "content_sha224": r.content_sha224,
+        "content_size": None if size is None else str(size),
+        "has_expected_string": None if found is None else str(found).lower(),
+    }
+
+
+@pytest.mark.parametrize("title", _content_titles())
+def test_content_fields_match_the_fixture(target_base: str, title: str) -> None:
+    scenario = parity.by_title()[title]
+    expected = check_fields(title)
+    allowed = golden.allowed_fields(title)
+    r = check_url(
+        make(scenario.url.replace(parity.T, target_base), **scenario.settings)
+    )
+    got = content_of(r)
+    for name in CONTENT_FIELDS:
+        if name not in allowed:
+            assert got[name] == expected.get(name), name
+
+
+def test_content_scenarios_are_all_checked() -> None:
+    titles = set(_content_titles())
+    assert {f"content-{case}" for case in server.CONTENT_CASES} <= titles
+    assert {"match-yes", "match-no", "gzip", "deflate-raw", "status-404"} <= titles
+
+
+def test_headers_match_the_fixture(target_base: str) -> None:
+    scenario = parity.by_title()["headers"]
+    capture = golden.read_capture(GOLDEN_DIR, "headers")
+    (event,) = [e for e in capture.events if e.sourcetype == golden.CHECK_SOURCETYPE]
+    expected = [p for p in golden.parse_raw(event.raw) if p.key.startswith("header_")]
+    r = check_url(
+        make(scenario.url.replace(parity.T, target_base), **scenario.settings)
+    )
+    assert r.headers is not None
+    got = [
+        golden.RawPair(f"header_{name}", escape_value(value))
+        for name, value in r.headers
+    ]
+    normalised = [
+        golden.RawPair(p.key, golden.normalise_literal(p.key, p.literal)) for p in got
+    ]
+    assert normalised == expected
+
+
+@pytest.mark.parametrize(
+    "title", ["body-big", "body-small", "body-lines", "body-binary"]
+)
+def test_body_matches_the_fixture(target_base: str, title: str) -> None:
+    """The body event's text before Splunk: Splunk drops the line break at the
+    end of an event, and dropped the NUL that 2.9.7 wrote into its stream."""
+    scenario = parity.by_title()[title]
+    capture = golden.read_capture(GOLDEN_DIR, title)
+    (event,) = [e for e in capture.events if e.sourcetype == golden.RESPONSE_SOURCETYPE]
+    r = check_url(
+        make(scenario.url.replace(parity.T, target_base), **scenario.settings)
+    )
+    assert r.body is not None
+    assert r.body.replace("\x00", "").rstrip("\n") == event.raw
+
+
+def test_no_content_without_a_response(base_url: str) -> None:
+    for url in (base_url + "/hang", base_url + "/redir/3"):
+        r = check_url(
+            make(
+                url,
+                timeout="1",
+                max_redirects="1",
+                should_contain_string="x",
+                return_body="1",
+                return_headers="1",
+            )
+        )
+        assert r.response_code is None
+        assert set(content_of(r).values()) == {None}
+        assert (r.headers, r.body) == (None, None)
+
+
+def test_content_of_an_error_status(base_url: str) -> None:
+    r = check_url(
+        make(
+            base_url + "/missing",
+            should_contain_string="nope",
+            return_body="1",
+            return_headers="1",
+        )
+    )
+    assert (r.response_code, r.has_expected_string, r.body) == (404, True, "nope")
+    assert r.content_size == 4
+    assert r.headers is not None and ("Content-Length", "4") in r.headers
+
+
+def plain_headers() -> Message:
+    headers = Message()
+    headers["Content-Type"] = "text/plain"
+    headers["X-One"] = "1"
+    return headers
+
+
+@pytest.mark.parametrize(
+    ("extra", "limit", "found", "headers", "body"),
+    [
+        ({}, 1000, None, None, None),
+        ({"should_contain_string": "llo w"}, 1000, True, None, None),
+        ({"should_contain_string": "HELLO"}, 1000, False, None, None),
+        (
+            {"return_headers": "1"},
+            1000,
+            None,
+            (("Content-Type", "text/plain"), ("X-One", "1")),
+            None,
+        ),
+        ({"return_body": "1"}, 1000, None, None, "hello world"),
+        ({"return_body": "1"}, 5, None, None, "hello"),
+        ({"return_body": "1"}, -1, None, None, "hello world"),
+        ({"return_body": "1"}, 0, None, None, None),
+        ({"return_body": "0"}, -1, None, None, None),
+    ],
+)
+def test_response_content_takes_what_the_stanza_asks_for(
+    extra: dict[str, str],
+    limit: int,
+    found: bool | None,
+    headers: tuple[tuple[str, str], ...] | None,
+    body: str | None,
+) -> None:
+    settings, _ = build_settings(
+        "web_ping://test", {"url": "http://x/", "interval": "60", **extra}
+    )
+    content = response_content(settings, limit, plain_headers(), b"hello world")
+    assert content.hashes.size == len("hello world")
+    assert (content.has_expected_string, content.headers, content.body) == (
+        found,
+        headers,
+        body,
+    )

@@ -11,7 +11,7 @@ import pytest
 from wptest.contract import Scenario, compare, describe
 from wptest.evidence import Evidence
 from wptest.install import APPS_DIR
-from wptest.splunk_rest import events_query
+from wptest.splunk_rest import body_count_query, events_query
 from wptest.stack import Stack
 from wptest.wait import INDEXED, wait_for
 
@@ -33,6 +33,14 @@ SCENARIOS = [
     Scenario("status-200", f"{T}/status/200", 15, 200, False),
     Scenario("status-404", f"{T}/status/404", 15, 404, False),
     Scenario("status-503", f"{T}/status/503", 15, 503, False),
+    Scenario("match-on-404", f"{T}/status/404", 15, 404, False,
+             settings={"should_contain_string": "ok"}, has_expected_string=True),
+    Scenario("body-on", f"{T}/big/10/body-on", 15, 200, False,
+             settings={"return_body": "true"}, body_event=True),
+    Scenario("body-off", f"{T}/big/10/body-off", 15, 200, False,
+             settings={"return_body": "false"}),
+    Scenario("body-empty", f"{T}/big/0/body-empty", 15, 200, False,
+             settings={"return_body": "true"}),
     Scenario("chain-at-3", f"{T}/chain/chain-at-3/3", 3600, 200, False,
              settings={"max_redirects": "3"}, requests=4),
     Scenario("chain-at-10", f"{T}/chain/chain-at-10/10", 3600, 200, False, requests=11),
@@ -85,6 +93,11 @@ SCENARIOS = [
              settings={"configuration": "ignore-all",
                        "user_agent": "wptest-proxy-env-ignored"}),
 ]  # fmt: skip
+
+
+def body_events(stack: Stack, title: str) -> int:
+    rows = stack.searcher("so1").search(body_count_query(title, stack.mark))
+    return int(rows[0]["count"]) if rows else 0
 
 
 def wait_for_events(stack: Stack, title: str) -> list[dict[str, str]]:
@@ -196,6 +209,7 @@ def test_scenario(standalone: Stack, scenario: Scenario, evidence: Evidence) -> 
         searched_at=searched_at,
         requests=requests,
         request_times=times,
+        body_events=body_events(standalone, scenario.title),
     )
     evidence.note(
         f"{standalone.project}.scenario.{scenario.title}", [str(diff) for diff in diffs]

@@ -69,8 +69,10 @@ max_redirects = <integer>
 * Default: blank
 
 return_body = <boolean>
-* If true (or 1), the response body is indexed as a separate event, up to the
-  limit set in website_monitoring.conf.
+* If true (or 1), the response body is indexed as a separate event with the
+  sourcetype <sourcetype>:response, up to the limit set in
+  website_monitoring.conf (max_response_body_length, in characters). An empty
+  body gives no such event.
 * Default: false
 
 return_headers = <boolean>

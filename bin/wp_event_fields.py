@@ -1,4 +1,4 @@
-"""The fields of a check event, in the order and form Website Monitoring 2.9.7 used."""
+"""The events of one check, in the order and form Website Monitoring 2.9.7 used."""
 
 from __future__ import annotations
 
@@ -66,3 +66,32 @@ def check_event(settings: Settings, result: CheckResult) -> str:
         index=settings["index"],
         host=settings["host"],
     )
+
+
+def body_event(settings: Settings, result: CheckResult) -> str | None:
+    """The XML of the body event, or None when the check has no body to return.
+
+    Sourcetype <sourcetype>:response; source, index, host and time as in the
+    check event. The text is the body as decoded; format_event removes the
+    characters XML forbids, so a binary body cannot break the stream. An empty
+    body gives no event: Splunk does not index an event without text.
+    """
+    if not result.body:
+        return None
+    return format_event(
+        settings["stanza"],
+        result.body,
+        time=result.finished,
+        sourcetype=f"{settings['sourcetype']}:response",
+        source=settings["stanza"],
+        index=settings["index"],
+        host=settings["host"],
+    )
+
+
+def check_events(settings: Settings, result: CheckResult) -> str:
+    """Everything one check writes, as one text for one write: the body event
+    first, as 2.9.7 wrote it, then the check event."""
+    body = body_event(settings, result)
+    check = check_event(settings, result)
+    return check if body is None else body + check

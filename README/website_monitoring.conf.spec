@@ -67,8 +67,8 @@ thread_limit = <integer>
 * Default: 200
 
 max_response_body_length = <integer>
-* The maximum length of the response body indexed for inputs that set
-  return_body to true.
+* The maximum length of the response body, in characters, indexed for inputs
+  that set return_body to true.
 * 0 indexes no body, even if an input sets return_body. -1 indexes the whole body.
 * Read from [default] only.
 * Default: 1000

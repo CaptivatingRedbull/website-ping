@@ -1,5 +1,4 @@
-"""website-ping's check events compared with Website Monitoring 2.9.7's golden events.
-
+"""website-ping's events compared with Website Monitoring 2.9.7's golden events.
 The parity stack runs the scenarios of wptest/parity.py that website-ping can
 already match; the others are skipped with the feature they still need.
 """
@@ -28,17 +27,24 @@ def _param(scenario: parity.ParityScenario) -> object:
     return pytest.param(scenario, id=scenario.title, marks=marks)
 
 
-def check_rows(
-    searcher: Searcher, title: str, since: float
-) -> list[dict[str, golden.FieldValue]] | None:
-    """The scenario's check events since the mark in arrival order, or None."""
+def rows_of(
+    searcher: Searcher, title: str, since: float, sourcetype: str
+) -> list[dict[str, golden.FieldValue]]:
+    """The scenario's events of one sourcetype since the mark, in arrival order."""
     searcher.search(golden.export_query(since, title))
     rows = [
         row
         for row in golden.parse_export(searcher.last_result)
-        if row.get("sourcetype") == golden.CHECK_SOURCETYPE
+        if row.get("sourcetype") == sourcetype
     ]
-    return sorted(rows, key=golden.arrival_order) or None
+    return sorted(rows, key=golden.arrival_order)
+
+
+def check_rows(
+    searcher: Searcher, title: str, since: float
+) -> list[dict[str, golden.FieldValue]] | None:
+    """The scenario's check events since the mark in arrival order, or None."""
+    return rows_of(searcher, title, since, golden.CHECK_SOURCETYPE) or None
 
 
 @pytest.mark.parametrize("scenario", [_param(s) for s in parity.PARITY_SCENARIOS])
@@ -71,6 +77,47 @@ def test_check_event_matches_golden(
         lines = [f"{scenario.title}: {len(failing)} field(s) differ from 2.9.7"]
         lines += [f"  {line}" for line in failing]
         lines += [f"  _raw: {actual.raw}"]
+        pytest.fail("\n".join(lines), pytrace=False)
+
+
+@pytest.mark.parametrize("scenario", [_param(s) for s in parity.PARITY_SCENARIOS])
+def test_body_event_matches_golden(
+    parity_stack: Stack, scenario: parity.ParityScenario, evidence: Evidence
+) -> None:
+    """A body event exactly where 2.9.7 wrote one, equal to it; its time is the
+    check's time, also when the body contains a date."""
+    fixture = golden.read_capture(GOLDEN_DIR, scenario.title)
+    expected = [e for e in fixture.events if e.sourcetype == golden.RESPONSE_SOURCETYPE]
+    searcher = parity_stack.searcher("so1")
+    # The body event is written together with, and before, its check event.
+    _ = wait_for(
+        INDEXED,
+        lambda: check_rows(searcher, scenario.title, parity_stack.mark),
+        EVENT_TIMEOUT,
+        parity_stack.stages,
+    )
+    rows = rows_of(
+        searcher, scenario.title, parity_stack.mark, golden.RESPONSE_SOURCETYPE
+    )
+    if not expected:
+        assert not rows, f"{scenario.title}: a body event, 2.9.7 wrote none"
+        return
+    assert rows, f"{scenario.title}: no body event"
+    actual = golden.event_from_result(rows[-1])
+    diffs = golden.compare(
+        expected[-1], actual, golden.parity_allowed(scenario.title, expected[-1])
+    )
+    evidence.note(
+        f"{parity_stack.project}.parity-body.{scenario.title}", [str(d) for d in diffs]
+    )
+    failing = [str(diff) for diff in golden.failing(diffs)]
+    event_time = actual.fields.get("_time")
+    if event_time != golden.TIME:
+        failing.append(f"_time: expected the time of the check, got {event_time}")
+    if failing:
+        lines = [f"{scenario.title}: {len(failing)} body event field(s) differ"]
+        lines += [f"  {line}" for line in failing]
+        lines += [f"  _raw: {actual.raw!r}"]
         pytest.fail("\n".join(lines), pytrace=False)
 
 

@@ -8,7 +8,9 @@ import pytest
 from ping_check import CheckResult, ProxyInfo
 from ping_config import Settings, build_settings
 from ping_events import escape_value, format_data
-from wp_event_fields import check_event, event_fields
+from target import server
+from wp_content import decode_body
+from wp_event_fields import body_event, check_event, check_events, event_fields
 from wptest import golden, parity
 
 GOLDEN_DIR = Path(__file__).parent / "golden" / "2.9.7"
@@ -167,3 +169,85 @@ def test_check_event_host(host: str, written: str | None) -> None:
     settings = settings_for("status-200", host=host)
     event = ET.fromstring(check_event(settings, CheckResult(200, 0.1, FINISHED)))
     assert event.findtext("event/host") == written
+
+
+# ---- body event --------------------------------------------------------------
+
+
+def streams(text: str) -> list[ET.Element]:
+    """Every <stream> of one write, each parsed on its own as splunkd reads them.
+    A "</stream>" in a body is escaped, so splitting there is safe."""
+    parts = text.split("</stream>")
+    assert parts[-1] == ""
+    return [ET.fromstring(part + "</stream>") for part in parts[:-1]]
+
+
+def fixture_body(title: str) -> str:
+    capture = golden.read_capture(GOLDEN_DIR, title)
+    (event,) = [e for e in capture.events if e.sourcetype == golden.RESPONSE_SOURCETYPE]
+    return event.raw
+
+
+def test_no_body_event_without_a_body() -> None:
+    settings = settings_for("status-200")
+    result = CheckResult(200, 0.1, FINISHED)
+    assert body_event(settings, result) is None
+    assert check_events(settings, result) == check_event(settings, result)
+
+
+def test_body_event_comes_first_with_the_check_events_envelope() -> None:
+    settings = settings_for("body-big", index="web", host="web01")
+    result = CheckResult(200, 0.1, FINISHED, body="0123456789" * 100)
+    body, check = streams(check_events(settings, result))
+    node = body.find("event")
+    assert node is not None
+    assert node.get("stanza") == node.findtext("source") == "web_ping://body-big"
+    assert node.findtext("sourcetype") == "web_ping:response"
+    assert node.findtext("data") == fixture_body("body-big")
+    assert node.findtext("time") == check.findtext("event/time") == "1700000000.250"
+    assert node.findtext("index") == check.findtext("event/index") == "web"
+    assert node.findtext("host") == check.findtext("event/host") == "web01"
+    assert check.findtext("event/sourcetype") == "web_ping"
+
+
+def test_body_sourcetype_follows_the_stanzas_sourcetype() -> None:
+    settings = settings_for("body-small", sourcetype="custom")
+    event = body_event(settings, CheckResult(200, 0.1, FINISHED, body="x"))
+    assert event is not None
+    assert ET.fromstring(event).findtext("event/sourcetype") == "custom:response"
+
+
+def test_multi_line_body_is_one_event() -> None:
+    text = decode_body(server.BODY_LINES, "text/plain; charset=utf-8")
+    event = body_event(
+        settings_for("body-lines"), CheckResult(200, 0.1, FINISHED, body=text)
+    )
+    assert event is not None
+    (stream,) = streams(event)
+    assert stream.findtext("event/data") == text
+    assert (stream.findtext("event/data") or "").rstrip("\n") == fixture_body(
+        "body-lines"
+    )
+
+
+def test_binary_body_keeps_the_stream_well_formed() -> None:
+    """Characters XML forbids are removed; 2.9.7 wrote them, Splunk dropped the
+    NUL and kept \\x0b and \\x1f. The next check's event stays intact."""
+    text = decode_body(server.BODY_BINARY, "text/plain; charset=utf-8")
+    written = check_events(
+        settings_for("body-binary"), CheckResult(200, 0.1, FINISHED, body=text)
+    ) + check_events(settings_for("status-200"), CheckResult(200, 0.1, FINISHED))
+    body, check, after = streams(written)
+    data = body.findtext("event/data") or ""
+    expected = fixture_body("body-binary").replace("\x0b", "").replace("\x1f", "")
+    assert data.rstrip("\n") == expected
+    assert check.findtext("event/sourcetype") == "web_ping"
+    assert after.findtext("event/source") == "web_ping://status-200"
+    assert (after.findtext("event/data") or "").startswith("response_code=200 ")
+
+
+def test_no_body_event_for_an_empty_body() -> None:
+    settings = settings_for("body-small")
+    result = CheckResult(200, 0.1, FINISHED, body="")
+    assert body_event(settings, result) is None
+    assert check_events(settings, result) == check_event(settings, result)

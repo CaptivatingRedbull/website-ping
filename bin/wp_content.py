@@ -1,9 +1,12 @@
-"""Response bodies: undo the Content-Encoding within a cap on the decoded size."""
+"""Response bodies: undo the Content-Encoding within a cap on the decoded size, then
+decode, hash and cut the text as Website Monitoring 2.9.7 (requests) did."""
 
 from __future__ import annotations
 
+import hashlib
 import zlib
-from collections.abc import Sequence
+from dataclasses import dataclass
+from email.message import Message
 
 MAX_BODY_BYTES = 50 * 1024 * 1024
 """Decoded bytes kept per check; one process serves every stanza, so the memory a
@@ -12,6 +15,8 @@ DECODE_STEP = 64 * 1024
 """The most output one decompress call may produce."""
 _GZIP_WBITS = 16 + zlib.MAX_WBITS
 _CODINGS = {"gzip": "gzip", "x-gzip": "gzip", "deflate": "deflate"}
+ISO_8859_1 = "ISO-8859-1"
+"""requests' charset for a text type without one (the HTTP/1.1 default, RFC 2616)."""
 
 
 class ContentDecodingError(ValueError):
@@ -145,6 +150,124 @@ class BodyDecoder:
         self.body += data
 
 
-def encoding_of(values: Sequence[str] | None) -> str | None:
-    """All Content-Encoding header lines as one value, as requests merged them."""
-    return ", ".join(values) if values else None
+def header_value(message: Message, name: str) -> str | None:
+    """All lines of one header as one value, joined with ", " as requests merged
+    them; None when the header is absent."""
+    values = message.get_all(name)
+    return ", ".join(str(value) for value in values) if values else None
+
+
+def header_fields(message: Message) -> tuple[tuple[str, str], ...]:
+    """Every response header in the order received, as requests presented them:
+    one entry per name (compared without case, spelled as first received) with
+    the values of repeated lines joined, such as two Set-Cookie lines as
+    "a=1, b=2"."""
+    fields: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for name in message:  # every header line, repeated names included
+        if name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        fields.append((name, header_value(message, name) or ""))
+    return tuple(fields)
+
+
+def _split_parameters(value: str) -> list[str]:
+    """The parts of a header value between semicolons, ignoring semicolons inside
+    quoted strings; the same split as the cgi module's (gone in Python 3.13)."""
+    parts: list[str] = []
+    rest = ";" + value
+    while rest[:1] == ";":
+        rest = rest[1:]
+        end = rest.find(";")
+        while end > 0 and (rest.count('"', 0, end) - rest.count('\\"', 0, end)) % 2:
+            end = rest.find(";", end + 1)
+        if end < 0:
+            end = len(rest)
+        parts.append(rest[:end].strip())
+        rest = rest[end:]
+    return parts
+
+
+def parse_content_type(value: str) -> tuple[str, dict[str, str]]:
+    """The media type and the parameters of a Content-Type value, as requests read
+    it: parameter names in lower case, a quoted value unquoted, the last of a
+    repeated name wins. The media type keeps its case."""
+    media_type, *rest = _split_parameters(value)
+    parameters: dict[str, str] = {}
+    for part in rest:
+        name, equals, text = part.partition("=")
+        if not equals:
+            continue
+        text = text.strip()
+        if len(text) >= 2 and text[0] == text[-1] == '"':
+            text = text[1:-1].replace("\\\\", "\\").replace('\\"', '"')
+        parameters[name.strip().lower()] = text
+    return media_type, parameters
+
+
+def body_charset(content_type: str | None) -> str | None:
+    """The charset requests chose from Content-Type: the charset parameter with
+    quotes stripped; ISO-8859-1 when the media type contains "text" (checked
+    case-sensitively, as requests did); otherwise None."""
+    if not content_type:
+        return None
+    media_type, parameters = parse_content_type(content_type)
+    if "charset" in parameters:
+        return parameters["charset"].strip("'\"")
+    if "text" in media_type:
+        return ISO_8859_1
+    return None
+
+
+def decode_body(raw: bytes | bytearray, content_type: str | None) -> str:
+    """The body as text, the way Website Monitoring hashed and searched it.
+
+    Decoded with body_charset; with UTF-8 when there is none, when Python has no
+    such codec, or when the codec cannot replace bad bytes. Bytes that do not
+    decode become U+FFFD. requests guessed a missing charset with chardet; for
+    ASCII and UTF-8 bodies UTF-8 gives the same text.
+    """
+    if not raw:
+        return ""
+    charset = body_charset(content_type)
+    if charset is not None:
+        try:
+            return raw.decode(charset, errors="replace")
+        except (LookupError, ValueError):
+            # LookupError: unknown or not a text codec. ValueError (UnicodeError):
+            # a codec such as idna that only decodes strictly.
+            pass
+    return raw.decode("utf-8", errors="replace")
+
+
+@dataclass(frozen=True)
+class ContentHashes:
+    md5: str
+    sha224: str
+    size: int
+    """Characters of the decoded text, not bytes."""
+
+
+def content_hashes(text: str) -> ContentHashes:
+    """Hashes of the UTF-8 encoded text, as 2.9.7 computed them. md5 is a
+    fingerprint here, not security, so it is also available on FIPS hosts."""
+    # surrogatepass: a codec such as unicode_escape can return lone surrogates,
+    # which plain UTF-8 refuses to encode.
+    data = text.encode("utf-8", errors="surrogatepass")
+    return ContentHashes(
+        md5=hashlib.md5(data, usedforsecurity=False).hexdigest(),
+        sha224=hashlib.sha224(data).hexdigest(),
+        size=len(text),
+    )
+
+
+def truncate_body(text: str, limit: int) -> str | None:
+    """The text of the body event for max_response_body_length: the whole body
+    for a negative limit, the first limit characters for a positive one, and no
+    body event for 0."""
+    if limit < 0:
+        return text
+    if limit == 0:
+        return None
+    return text[:limit]

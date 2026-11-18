@@ -13,7 +13,7 @@ from ping_config import ConfigError, Settings, build_settings
 from ping_events import write_event
 from wp_context import CheckContext, ConfigContexts
 from wp_deadline import Deadline
-from wp_event_fields import check_event
+from wp_event_fields import check_events
 from wp_runner import STOP_WAIT, Checkpoints, Runner, read_input_config
 from wp_splunk import DEFAULT_THREAD_LIMIT, ConfigCache, RestClient, SplunkdClient
 from wp_version import runtime_versions
@@ -158,7 +158,7 @@ def build_runner(xml_text: str, client: SplunkdClient | None = None) -> Runner:
     return Runner(
         settings,
         run_check,
-        check_event,
+        check_events,
         write_to_stdout,
         Checkpoints(config.checkpoint_dir),
         thread_limit=thread_limit,

@@ -162,6 +162,39 @@ Events carry the stanza's `proxy_server`, `proxy_type`, `proxy_port` and, if set
 With `log_level = DEBUG`, every request logs its route without the password:
 `direct`, `env http://proxy:3128` or `conf corporate http://proxy:3128 user=monitor`.
 
+## Content checks
+
+Every check that gets a response, error statuses included, adds `content_md5`,
+`content_sha224` and `content_size` to its event. They describe the body as text,
+after gzip or deflate compression is undone: the body is decoded with the
+`charset` of its `Content-Type`, as ISO-8859-1 for a text type without one, and
+as UTF-8 otherwise (also for a charset Python does not know); bytes that do not
+decode become U+FFFD. The hashes are of that text encoded as UTF-8, and
+`content_size` counts its characters. These are Website Monitoring's rules, with
+one exception: for a body whose `Content-Type` names no charset and is not a text
+type, Website Monitoring guessed the charset from the bytes. Such a body with
+bytes that are neither ASCII nor UTF-8 gets other hashes after the migration.
+`content_md5` is also written on FIPS hosts, where Website Monitoring left it out.
+
+Only the first 50 MiB of a body are read; the hashes of a larger body cover those,
+and `website_ping.log` has a WARN.
+
+`should_contain_string` adds `has_expected_string=true` or `false`: whether the
+decoded text contains the string, case-sensitive. `return_headers = true` adds a
+`header_<Name>` field for every response header, in the order received; repeated
+headers such as `Set-Cookie` are joined with `, `.
+
+`return_body = true` indexes the decoded body as a second event with the
+sourcetype `web_ping:response` (`<sourcetype>:response` for an input with its own
+sourcetype), with the check event's source, host, index and time. It holds the
+first `max_response_body_length` characters (`[default]` of
+`website_monitoring.conf`, default 1000, -1 for the whole body, 0 for none). A
+multi-line body stays one event, and its time is the time of the check even when
+the page contains a date (the app ships `DATETIME_CONFIG = NONE` for the
+sourcetype). Characters that XML does not allow, such as control characters in a
+binary body, are removed; an empty body gives no body event. The body can contain
+personal data from the page, so enable it only where that is acceptable.
+
 ## Logging
 
 The input writes its log to `$SPLUNK_HOME/var/log/splunk/website_ping.log`,
