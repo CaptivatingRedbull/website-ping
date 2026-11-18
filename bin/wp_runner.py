@@ -27,10 +27,10 @@ from typing import Protocol, cast
 from logger import StanzaLogger, process_log, stanza_logger
 from ping_check import CheckResult
 from ping_config import Settings
+from wp_context import BuiltinContexts, CheckContext
 from wp_deadline import Deadline
+from wp_splunk import DEFAULT_THREAD_LIMIT
 
-THREAD_LIMIT = 200
-"""Checks running at the same time, as Website Monitoring's default thread_limit."""
 TICK = 1.0
 """Seconds between scheduling passes."""
 POLL = 0.1
@@ -151,13 +151,24 @@ class Executor(Protocol):
     """The part of concurrent.futures.Executor the Runner uses."""
 
     def submit(
-        self, fn: Callable[[_Stanza, float], None], /, *args: object
+        self, fn: Callable[[_Stanza, CheckContext, float], None], /, *args: object
     ) -> object: ...
-
     def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None: ...
 
 
-Check = Callable[[Settings, Deadline], CheckResult]
+class Contexts(Protocol):
+    """Where the scheduler gets the context of each check from."""
+
+    def ready(self) -> bool:
+        """Called once per scheduling pass. False: no check may start now."""
+        ...
+
+    def context(self, settings: Settings, log: StanzaLogger) -> CheckContext | None:
+        """The context for a check of this stanza; None: do not run it now."""
+        ...
+
+
+Check = Callable[[CheckContext, Deadline], CheckResult]
 Render = Callable[[Settings, CheckResult], str]
 Write = Callable[[str], None]
 
@@ -178,7 +189,8 @@ class Runner:
         write: Write,
         checkpoints: Checkpoints,
         *,
-        thread_limit: int = THREAD_LIMIT,
+        thread_limit: int = DEFAULT_THREAD_LIMIT,
+        contexts: Contexts | None = None,
         clock: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
         executor: Executor | None = None,
@@ -193,6 +205,7 @@ class Runner:
             for s in settings
         ]
         self._check: Check = check
+        self._contexts: Contexts = contexts or BuiltinContexts()
         self._render: Render = render
         self._write: Write = write
         self._checkpoints: Checkpoints = checkpoints
@@ -238,9 +251,20 @@ class Runner:
     # ---- scheduling ----------------------------------------------------------
 
     def tick(self) -> None:
-        """One scheduling pass: expire overdue deadlines, submit due stanzas,
-        heartbeat, parent check."""
+        """One scheduling pass: expire overdue deadlines, submit due stanzas (once
+        the configuration is loaded), heartbeat, parent check."""
         self._expire_deadlines(only_overdue=True)
+        if self._contexts.ready():
+            self._submit_due()
+        if self.stopping:
+            return
+        if self._monotonic() >= self._next_heartbeat:
+            self.heartbeat()
+        if self._parent_pid() != self._first_parent:
+            process_log.warning("splunkd is gone (parent process changed)")
+            self.stop("parent process gone")
+
+    def _submit_due(self) -> None:
         now = self._clock()
         for entry in self._stanzas:
             if self.stopping:
@@ -250,20 +274,22 @@ class Runner:
                     entry.last_run, entry.settings["interval"], now
                 ):
                     continue
+            # Not run and not checkpointed: asked again at the next pass.
+            context = self._contexts.context(entry.settings, entry.log)
+            if context is None:
+                continue
+            with self._lock:
                 entry.busy = True
                 self._queued += 1
             try:
-                _ = self._executor.submit(self._execute, entry, self._monotonic())
+                _ = self._executor.submit(
+                    self._execute, entry, context, self._monotonic()
+                )
             except BaseException:
                 with self._lock:
                     entry.busy = False
                     self._queued -= 1
                 raise
-        if self._monotonic() >= self._next_heartbeat:
-            self.heartbeat()
-        if self._parent_pid() != self._first_parent:
-            process_log.warning("splunkd is gone (parent process changed)")
-            self.stop("parent process gone")
 
     def heartbeat(self) -> None:
         with self._lock:
@@ -326,7 +352,7 @@ class Runner:
 
     # ---- one check (worker thread) -------------------------------------------
 
-    def _execute(self, entry: _Stanza, submitted: float) -> None:
+    def _execute(self, entry: _Stanza, context: CheckContext, submitted: float) -> None:
         started = self._monotonic()
         with self._lock:
             self._queued -= 1
@@ -339,7 +365,7 @@ class Runner:
                 entry.log.warning("check started %d s late", round(waited))
                 with self._lock:
                     self._late += 1
-            self._run_check(entry, started)
+            self._run_check(entry, context, started)
         except Exception:  # a worker must never die silently
             entry.log.exception("check could not run")
         finally:
@@ -348,7 +374,7 @@ class Runner:
                 entry.busy = False
                 self._idle.notify_all()
 
-    def _run_check(self, entry: _Stanza, started: float) -> None:
+    def _run_check(self, entry: _Stanza, context: CheckContext, started: float) -> None:
         settings = entry.settings
         stanza = settings["stanza"]
         last_ran = entry.last_run
@@ -356,7 +382,7 @@ class Runner:
         with self._lock:
             self._deadlines[stanza] = deadline
         try:
-            result: CheckResult | None = self._check(settings, deadline)
+            result: CheckResult | None = self._check(context, deadline)
         except Exception:  # checkpoint anyway, so it does not loop
             entry.log.exception("check failed unexpectedly, no event written")
             result = None

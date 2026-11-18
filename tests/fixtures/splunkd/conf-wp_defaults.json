@@ -1,0 +1,71 @@
+{
+    "links": {
+        "create": "/servicesNS/nobody/wptest_probe/configs/conf-website_monitoring/_new",
+        "_reload": "/servicesNS/nobody/wptest_probe/configs/conf-website_monitoring/_reload",
+        "_acl": "/servicesNS/nobody/wptest_probe/configs/conf-website_monitoring/_acl"
+    },
+    "origin": "https://localhost:8089/servicesNS/nobody/wptest_probe/configs/conf-website_monitoring",
+    "updated": "2026-11-17T19:49:06+00:00",
+    "generator": {
+        "build": "1b0c587000b8",
+        "version": "9.4.17"
+    },
+    "entry": [
+        {
+            "name": "wp_defaults",
+            "id": "https://localhost:8089/servicesNS/nobody/wptest_probe/configs/conf-website_monitoring/wp_defaults",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/servicesNS/nobody/wptest_probe/configs/conf-website_monitoring/wp_defaults",
+                "list": "/servicesNS/nobody/wptest_probe/configs/conf-website_monitoring/wp_defaults",
+                "_reload": "/servicesNS/nobody/wptest_probe/configs/conf-website_monitoring/wp_defaults/_reload",
+                "edit": "/servicesNS/nobody/wptest_probe/configs/conf-website_monitoring/wp_defaults",
+                "disable": "/servicesNS/nobody/wptest_probe/configs/conf-website_monitoring/wp_defaults/disable"
+            },
+            "author": "nobody",
+            "acl": {
+                "app": "wptest_probe",
+                "can_change_perms": true,
+                "can_list": true,
+                "can_share_app": true,
+                "can_share_global": true,
+                "can_share_user": false,
+                "can_write": true,
+                "modifiable": true,
+                "owner": "nobody",
+                "perms": {
+                    "read": [
+                        "*"
+                    ],
+                    "write": [
+                        "admin"
+                    ]
+                },
+                "removable": false,
+                "sharing": "global"
+            },
+            "fields": {
+                "required": [],
+                "optional": [],
+                "wildcard": [
+                    ".*"
+                ]
+            },
+            "content": {
+                "disabled": false,
+                "eai:acl": null,
+                "eai:appName": "wptest_probe",
+                "eai:userName": "nobody",
+                "max_response_body_length": "1000",
+                "proxy_server": "proxy.invalid",
+                "thread_limit": "9"
+            }
+        }
+    ],
+    "paging": {
+        "total": 1,
+        "perPage": 30,
+        "offset": 0
+    },
+    "messages": []
+}

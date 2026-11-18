@@ -26,6 +26,8 @@ title = <string>
 
 configuration = <string>
 * Which stanza of website_monitoring.conf to take the proxy and other settings from.
+* A stanza that does not exist: the input runs with that file's built-in defaults
+  (no proxy) and logs a warning.
 * Default: default
 
 client_certificate = <string>
@@ -92,16 +94,15 @@ ssl_verify = <boolean>
   "SSLCertVerificationError: certificate has expired".
 * If false (or 0), any certificate is accepted, as in Website Monitoring.
 * TLS 1.0 and 1.1 are refused either way.
-* Default: blank, which means false
+* Default: blank, which means the ssl_verify of the input's stanza in
+  website_monitoring.conf (see configuration), which is false unless set there.
 
 ca_certs = <string>
 * Path to a PEM file of the CA certificates to trust, used when ssl_verify is
   true. It must contain the root certificate; an intermediate alone is not
   enough.
-* Blank: the file named by the SSL_CERT_FILE environment variable, else the
-  first operating system CA bundle that exists:
-  /etc/ssl/certs/ca-certificates.crt, /etc/pki/tls/certs/ca-bundle.crt,
-  /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem, /etc/ssl/ca-bundle.pem.
+* Blank: the ca_certs of the input's stanza in website_monitoring.conf. If that
+  is blank too: the file named by the SSL_CERT_FILE environment variable, else the
 * If the file cannot be read or no bundle exists, no request is sent and the
   error field says why.
 * The file is read once, when the input starts.

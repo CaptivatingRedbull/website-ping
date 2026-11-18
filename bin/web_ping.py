@@ -11,15 +11,11 @@ from logger import CONSOLE, flush_logging, process_log, setup_logging, stanza_lo
 from ping_check import CheckResult, check_url
 from ping_config import ConfigError, Settings, build_settings
 from ping_events import write_event
+from wp_context import CheckContext, ConfigContexts
 from wp_deadline import Deadline
 from wp_event_fields import check_event
-from wp_runner import (
-    STOP_WAIT,
-    THREAD_LIMIT,
-    Checkpoints,
-    Runner,
-    read_input_config,
-)
+from wp_runner import STOP_WAIT, Checkpoints, Runner, read_input_config
+from wp_splunk import DEFAULT_THREAD_LIMIT, ConfigCache, RestClient, SplunkdClient
 from wp_version import runtime_versions
 
 SCHEME_ARGS: tuple[tuple[str, str, str], ...] = (
@@ -107,10 +103,11 @@ def load_settings(
     return valid, invalid
 
 
-def run_check(settings: Settings, deadline: Deadline) -> CheckResult:
+def run_check(context: CheckContext, deadline: Deadline) -> CheckResult:
+    settings = context.settings
     slog = stanza_logger(settings["stanza"], settings["log_level"])
     slog.info("starting check url=%s", settings["url"])
-    result = check_url(settings, deadline)
+    result = check_url(context, deadline)
     slog.info(
         "check done code=%s time=%.3f timed_out=%s",
         result.response_code,
@@ -126,15 +123,30 @@ def write_to_stdout(event: str) -> None:
     write_event(event, sys.stdout)
 
 
-def build_runner(xml_text: str) -> Runner:
-    """The Runner for the configuration splunkd sent; logs the start line."""
+def build_runner(xml_text: str, client: SplunkdClient | None = None) -> Runner:
+    """The Runner for the configuration splunkd sent; logs the start line.
+
+    website_monitoring.conf and storage/passwords are read through client, by
+    default splunkd's REST API with the session key from xml_text.
+    """
     config = read_input_config(xml_text)
     settings, invalid = load_settings(config.stanzas)
+    cache = ConfigCache(client or RestClient(config.session_key))
+    snapshot = cache.refresh_if_due()
+    if snapshot is None:
+        # The thread pool is sized once; a later load cannot change it.
+        thread_limit = DEFAULT_THREAD_LIMIT
+        process_log.error(
+            "thread_limit of website_monitoring.conf not known, using %d until the input restarts",
+            thread_limit,
+        )
+    else:
+        thread_limit = snapshot.app.thread_limit
     process_log.info(
         "starting stanzas=%d invalid=%d thread_limit=%d pid=%d %s",
         len(settings),
         invalid,
-        THREAD_LIMIT,
+        thread_limit,
         os.getpid(),
         runtime_versions(),
         extra=CONSOLE,
@@ -149,7 +161,8 @@ def build_runner(xml_text: str) -> Runner:
         check_event,
         write_to_stdout,
         Checkpoints(config.checkpoint_dir),
-        thread_limit=THREAD_LIMIT,
+        thread_limit=thread_limit,
+        contexts=ConfigContexts(cache),
     )
 
 

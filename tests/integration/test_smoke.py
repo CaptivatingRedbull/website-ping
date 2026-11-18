@@ -17,7 +17,14 @@ import time
 import pytest
 from wptest import install
 from wptest.evidence import Evidence
-from wptest.install import APPS_DIR, CONFIG_APP, RESTART_TIMEOUT, Package
+from wptest.install import (
+    APPS_DIR,
+    CONFIG_APP,
+    RESTART_TIMEOUT,
+    STORED_PASSWORD,
+    STORED_PASSWORD_STANZA,
+    Package,
+)
 from wptest.splunk_rest import Searcher, error_lines_query, events_query
 from wptest.stack import CHECKPOINT_DIR, SPLUNK, Stack
 from wptest.versions import Runtime
@@ -98,6 +105,21 @@ def test_btool_shows_app_defaults(standalone: Stack) -> None:
         assert not any(line.startswith(f"{key} ") for line in from_app), output
 
 
+def test_btool_check_accepts_website_monitoring_conf(standalone: Stack) -> None:
+    """btool check reads the shipped file and the test app's copy and reports
+    nothing for them: the spec declares every key."""
+    output = standalone.exec("so1", f"{SPLUNK} btool check --debug 2>&1 || true\n")
+    lines = {
+        line.strip()
+        for line in output.splitlines()
+        if "website_monitoring.conf" in line
+    }
+    assert lines == {
+        f"Checking: /opt/splunk/etc/apps/{app}/default/website_monitoring.conf"
+        for app in (install.APP, CONFIG_APP)
+    }, output
+
+
 def start_line_query(since: float) -> str:
     return (
         'search index=_internal source=*website_ping.log* "starting stanzas="'
@@ -122,6 +144,41 @@ def test_interpreter(standalone: Stack, runtime: Runtime, evidence: Evidence) ->
     match = re.search(r' python=(\S+) openssl="[^"]+"', raw)
     assert match is not None, raw
     assert match.group(1).startswith(f"{runtime.python}."), raw
+
+
+def test_thread_limit_from_website_monitoring_conf(standalone: Stack) -> None:
+    """[default] of the config app's exported website_monitoring.conf reaches the
+    input through website_ping's [wp_defaults]."""
+    searcher = standalone.searcher("so1")
+    rows = wait_for(
+        "start line",
+        lambda: searcher.search(start_line_query(standalone.mark)) or None,
+        EVENT_TIMEOUT,
+        standalone.stages,
+    )
+    assert " thread_limit=50 " in rows[0]["_raw"], rows[0]["_raw"]
+
+
+def test_stored_password_is_found_and_never_logged(standalone: Stack) -> None:
+    searcher = standalone.searcher("so1")
+    stanza = f"web_ping://{STORED_PASSWORD_STANZA}"
+    _ = wait_for(
+        "password found line",
+        lambda: (
+            searcher.search(
+                "search index=_internal source=*website_ping.log*"
+                f' "password found for stanza" "stanza={stanza}"'
+                f" _index_earliest={int(standalone.mark)}"
+            )
+            or None
+        ),
+        EVENT_TIMEOUT,
+        standalone.stages,
+    )
+    leaked = searcher.search(
+        f'search index=_internal "{STORED_PASSWORD}" _index_earliest={int(standalone.mark)}'
+    )
+    assert leaked == [], leaked
 
 
 @pytest.mark.parametrize("name", sorted(INVALID_STANZAS))

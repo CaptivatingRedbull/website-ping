@@ -90,7 +90,10 @@ For new deployments, turn verification on for every input in
 [web_ping]
 ssl_verify = true
 ```
-
+The same default can be set in `website_monitoring.conf`, for all inputs in
+`[default]` or for the inputs of one proxy configuration in its stanza, together
+with `ca_certs`. A value in `inputs.conf`, including one the input inherits from
+`[web_ping]`, wins over `website_monitoring.conf`.
 With verification on, a check tests the certificate chain and the host name.
 `ca_certs` names a PEM file with the CAs to trust, for example an internal CA;
 it must contain the root certificate, an intermediate alone is not enough.

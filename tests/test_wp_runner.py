@@ -12,9 +12,10 @@ from pathlib import Path
 
 import pytest
 import wp_runner
-from logger import log_to_stderr, setup_logging
+from logger import StanzaLogger, log_to_stderr, setup_logging
 from ping_check import CheckResult
 from ping_config import Settings, build_settings
+from wp_context import CheckContext, make_context
 from wp_deadline import Deadline
 from wp_runner import (
     Checkpoints,
@@ -78,9 +79,9 @@ def settings(name: str, interval: str = "60", **extra: str) -> Settings:
     return built
 
 
-def ok(stanza_settings: Settings, _deadline: Deadline) -> CheckResult:
+def ok(context: CheckContext, _deadline: Deadline) -> CheckResult:
     return CheckResult(
-        response_code=200, elapsed=0.1, finished=1.0, error=stanza_settings["name"]
+        response_code=200, elapsed=0.1, finished=1.0, error=context.settings["name"]
     )
 
 
@@ -110,6 +111,7 @@ class Harness:
         render_event: wp_runner.Render = render,
         write: wp_runner.Write | None = None,
         checkpoint_dir: Path | None = None,
+        contexts: wp_runner.Contexts | None = None,
     ) -> None:
         self.clock: Clock = Clock()
         self.executor: ManualExecutor = ManualExecutor()
@@ -124,6 +126,7 @@ class Harness:
             render_event,
             write or self.events.append,
             self.checkpoints,
+            contexts=contexts,
             clock=self.clock.time,
             monotonic=self.clock.monotonic,
             executor=self.executor,
@@ -312,10 +315,10 @@ def test_late_start_warns(tmp_path: Path, log_file: Path) -> None:
 def test_check_exception_does_not_stop_the_others(
     tmp_path: Path, log_file: Path
 ) -> None:
-    def check(stanza_settings: Settings, deadline: Deadline) -> CheckResult:
-        if stanza_settings["name"] == "bad":
+    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
+        if context.settings["name"] == "bad":
             raise RuntimeError("boom")
-        return ok(stanza_settings, deadline)
+        return ok(context, deadline)
 
     h = Harness(tmp_path, [settings("bad"), settings("good")], check=check)
     assert h.cycle() == 2
@@ -356,9 +359,9 @@ def test_closed_stdout_stops_without_checkpoint(
 def test_result_after_stop_is_neither_written_nor_checkpointed(tmp_path: Path) -> None:
     holder: list[Runner] = []
 
-    def check(stanza_settings: Settings, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
         holder[0].stop("SIGTERM")
-        return ok(stanza_settings, deadline)
+        return ok(context, deadline)
 
     h = Harness(tmp_path, [settings("a")], check=check)
     holder.append(h.runner)
@@ -409,6 +412,82 @@ def test_heartbeat_line(tmp_path: Path, log_file: Path) -> None:
     assert log_text(log_file).rstrip().endswith("late=0 events=0")
 
 
+# ---- check contexts --------------------------------------------------------------
+
+
+class FakeContexts:
+    """Contexts under the test's control: loaded or not, stanzas held back."""
+
+    def __init__(self) -> None:
+        self.loaded: bool = True
+        self.held: set[str] = set()
+        self.passes: int = 0
+        self.body_length: int = 1000
+
+    def ready(self) -> bool:
+        self.passes += 1
+        return self.loaded
+
+    def context(self, settings: Settings, log: StanzaLogger) -> CheckContext | None:
+        if settings["name"] in self.held:
+            return None
+        return make_context(settings, max_response_body_length=self.body_length)
+
+
+def test_nothing_runs_until_the_configuration_is_loaded(
+    tmp_path: Path, log_file: Path
+) -> None:
+    contexts = FakeContexts()
+    contexts.loaded = False
+    h = Harness(tmp_path, [settings("a")], contexts=contexts)
+    assert h.cycle() == 0
+    h.clock.advance(wp_runner.HEARTBEAT)
+    h.runner.tick()
+    assert " heartbeat stanzas=1 in_flight=0 queued=0 " in log_text(log_file)
+    contexts.loaded = True
+    assert h.cycle() == 1
+    assert contexts.passes == 3
+
+
+def test_stanza_without_context_is_skipped_without_checkpoint(tmp_path: Path) -> None:
+    contexts = FakeContexts()
+    contexts.held = {"a"}
+    h = Harness(tmp_path, [settings("a"), settings("b")], contexts=contexts)
+    assert h.cycle() == 1
+    assert h.events == ["b=200\n"]
+    assert h.checkpoints.last_run("web_ping://a") is None
+    contexts.held = set()
+    assert h.cycle() == 1
+    assert h.events[-1] == "a=200\n"
+
+
+def test_check_receives_the_context(tmp_path: Path) -> None:
+    seen: list[CheckContext] = []
+
+    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
+        seen.append(context)
+        return ok(context, deadline)
+
+    contexts = FakeContexts()
+    contexts.body_length = 77
+    h = Harness(tmp_path, [settings("a")], check=check, contexts=contexts)
+    assert h.cycle() == 1
+    assert [c.max_response_body_length for c in seen] == [77]
+    assert seen[0].settings["stanza"] == "web_ping://a"
+
+
+def test_without_contexts_checks_get_the_builtin_values(tmp_path: Path) -> None:
+    seen: list[CheckContext] = []
+
+    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
+        seen.append(context)
+        return ok(context, deadline)
+
+    h = Harness(tmp_path, [settings("a")], check=check)
+    assert h.cycle() == 1
+    assert seen == [make_context(settings("a"))]
+
+
 # ---- threads, deadlines, stop --------------------------------------------------
 
 
@@ -424,14 +503,14 @@ def test_thread_limit_is_respected(tmp_path: Path) -> None:
     lock = threading.Lock()
     running = [0, 0]  # now, maximum
 
-    def check(stanza_settings: Settings, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
         with lock:
             running[0] += 1
             running[1] = max(running)
         _ = release.wait(5)
         with lock:
             running[0] -= 1
-        return ok(stanza_settings, deadline)
+        return ok(context, deadline)
 
     events: list[str] = []
     runner = Runner(
@@ -456,10 +535,10 @@ def test_tick_expires_overdue_deadline(tmp_path: Path) -> None:
     clock = Clock()
     expired = threading.Event()
 
-    def check(stanza_settings: Settings, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
         deadline.on_expire(expired.set)
         _ = expired.wait(5)
-        return ok(stanza_settings, deadline)
+        return ok(context, deadline)
 
     events: list[str] = []
     runner = Runner(
@@ -485,11 +564,11 @@ def test_tick_expires_overdue_deadline(tmp_path: Path) -> None:
 
 
 def test_shutdown_expires_running_checks_and_waits(tmp_path: Path) -> None:
-    def check(stanza_settings: Settings, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
         done = threading.Event()
         deadline.on_expire(done.set)
         _ = done.wait(5)
-        return ok(stanza_settings, deadline)
+        return ok(context, deadline)
 
     events: list[str] = []
     runner = Runner(
@@ -506,9 +585,9 @@ def test_shutdown_expires_running_checks_and_waits(tmp_path: Path) -> None:
 def test_shutdown_gives_up_after_timeout(tmp_path: Path) -> None:
     release = threading.Event()
 
-    def check(stanza_settings: Settings, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
         _ = release.wait(5)  # ignores the deadline
-        return ok(stanza_settings, deadline)
+        return ok(context, deadline)
 
     runner = Runner(
         [settings("a")], check, render, lambda _e: None, Checkpoints(str(tmp_path))

@@ -20,6 +20,9 @@ from wptest.wait import Stages, wait_for
 ROOT = Path(__file__).absolute().parents[3]
 APP = "website_ping"
 CONFIG_APP = "website_ping_inputs"
+STORED_PASSWORD_STANZA = "stored-password"
+STORED_PASSWORD = "wptest-stored-password"
+"""Stored for web_ping://stored-password in the search app; must never be logged."""
 PROBE_APP = "wptest_probe"
 PROBE_IN_CONTAINER = f"/tmp/{PROBE_APP}.tar.gz"
 APPS_DIR = ROOT / "tests" / "integration" / "apps"

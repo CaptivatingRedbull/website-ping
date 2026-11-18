@@ -389,6 +389,16 @@ def setup_standalone(stack: Stack, manager: StackManager) -> None:
     _start(stack, manager)
     _deliver_helpers(stack, manager, ("so1",))
     _probe(stack, manager, ("so1",))
+    # Stored before the input starts, shared only within the search app: the input
+    # must find it there, as Website Monitoring did.
+    _ = stack.rest("so1").post(
+        "/servicesNS/nobody/search/storage/passwords",
+        {
+            "name": "wptest-user",
+            "password": install.STORED_PASSWORD,
+            "realm": f"web_ping://{install.STORED_PASSWORD_STANZA}",
+        },
+    )
     install.install_single(
         stack,
         "so1",

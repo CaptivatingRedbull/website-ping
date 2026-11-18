@@ -19,7 +19,9 @@ import ping_check
 import pytest
 from compat import override
 from ping_check import check_url
-from ping_config import Settings, build_settings
+from ping_config import build_settings
+from wp_context import CheckContext, make_context
+from wp_splunk import Configuration
 from wp_tls import (
     NO_CA_BUNDLE,
     ContextCache,
@@ -181,14 +183,16 @@ def records() -> Iterator[list[logging.LogRecord]]:
     logger.log.removeHandler(handler)
 
 
-def make(url: str, **extra: str) -> Settings:
+def make(
+    url: str, configuration: Configuration | None = None, **extra: str
+) -> CheckContext:
     settings, _ = build_settings(
         "web_ping://tls", {"url": url, "interval": "60", **extra}
     )
-    return settings
+    return make_context(settings, configuration or Configuration())
 
 
-def verified(url: str, ca: Path) -> Settings:
+def verified(url: str, ca: Path) -> CheckContext:
     return make(url, ssl_verify="1", ca_certs=str(ca))
 
 
@@ -250,6 +254,32 @@ def test_bad_certificates_fail(
     r = check_url(verified(servers[name].url, pki.ca))
     assert r.response_code is None and not r.timed_out
     assert re.search(ERROR_PATTERNS[pattern], r.error), r.error
+
+
+def test_verification_on_from_the_configuration(
+    servers: dict[str, TLSServer], pki: certs.Certificates
+) -> None:
+    on = Configuration(ssl_verify=True, ca_certs=str(pki.ca))
+    assert check_url(make(servers["valid"].url, on)).response_code == 200
+    r = check_url(make(servers["expired"].url, on))
+    assert r.error == "SSLCertVerificationError: certificate has expired"
+
+
+@pytest.mark.parametrize("value", ["0", "false"])
+def test_input_ssl_verify_wins_over_the_configuration(
+    servers: dict[str, TLSServer], pki: certs.Certificates, value: str
+) -> None:
+    on = Configuration(ssl_verify=True, ca_certs=str(pki.ca))
+    r = check_url(make(servers["expired"].url, on, ssl_verify=value))
+    assert r.response_code == 200 and r.error == ""
+
+
+def test_input_ca_certs_wins_over_the_configuration(
+    servers: dict[str, TLSServer], pki: certs.Certificates, tmp_path: Path
+) -> None:
+    on = Configuration(ssl_verify=True, ca_certs=str(tmp_path / "absent.pem"))
+    r = check_url(make(servers["valid"].url, on, ca_certs=str(pki.ca)))
+    assert r.response_code == 200 and r.error == ""
 
 
 def test_certificate_error_is_the_verification_result(

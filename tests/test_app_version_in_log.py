@@ -4,6 +4,7 @@ import os
 import platform
 import re
 import ssl
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,14 @@ CONFIG_XML = (
     '<param name="interval">1h</param>'
     "</stanza></configuration></input>"
 )
+
+
+class EmptyConfig:
+    """splunkd with website_monitoring.conf as shipped and no stored password."""
+
+    def get_json(self, path: str, params: Mapping[str, str]) -> Mapping[str, object]:
+        content: dict[str, str] = {}
+        return {"entry": [{"name": "wp_defaults", "content": content}]}
 
 
 def test_reads_version(tmp_path: Path) -> None:
@@ -61,7 +70,7 @@ def test_start_line_carries_runtime_versions(
     monkeypatch.setenv("SPLUNK_HOME", str(tmp_path))
     try:
         assert setup_logging() is not None
-        runner = web_ping.build_runner(CONFIG_XML)
+        runner = web_ping.build_runner(CONFIG_XML, EmptyConfig())
         _ = runner.shutdown(0)
     finally:
         log_to_stderr()

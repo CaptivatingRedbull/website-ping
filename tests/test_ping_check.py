@@ -18,9 +18,10 @@ import ping_check
 import pytest
 from compat import override
 from ping_check import check_url
-from ping_config import DEFAULT_USER_AGENT, Settings, build_settings
+from ping_config import DEFAULT_USER_AGENT, build_settings
 from target import server
 from wp_content import MAX_BODY_BYTES, BodyDecoder
+from wp_context import CheckContext, make_context
 from wp_deadline import Deadline
 from wptest import golden, legacy, parity
 
@@ -100,11 +101,11 @@ def base_url() -> Iterator[str]:
     server.server_close()
 
 
-def make(url: str, **extra: str) -> Settings:
+def make(url: str, **extra: str) -> CheckContext:
     settings, _ = build_settings(
         "web_ping://test", {"url": url, "interval": "60", **extra}
     )
-    return settings
+    return make_context(settings)
 
 
 def test_ok(base_url: str) -> None:

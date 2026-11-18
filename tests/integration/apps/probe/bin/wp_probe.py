@@ -26,11 +26,18 @@ SCHEME = "wp_probe"
 TICK = 10.0
 HARNESS_CA = "/tmp/wptest-ca.pem"
 ARGS = ("url", "interval", "title", "configuration", "exit_after", "sigterm_delay")
+CONF = "configs/conf-website_monitoring"
+PROPERTIES = "properties/website_monitoring/default"
 REST_PATHS = (
-    "/servicesNS/nobody/-/configs/conf-website_monitoring?output_mode=json&count=0",
+    f"/servicesNS/nobody/-/{CONF}?output_mode=json&count=0",
+    f"/servicesNS/nobody/wptest_probe/{CONF}?output_mode=json&count=0",
+    f"/servicesNS/nobody/wptest_probe/{CONF}/wp_defaults?output_mode=json",
+    f"/servicesNS/nobody/wptest_probe/{CONF}/no_such_stanza?output_mode=json",
+    f"/servicesNS/nobody/wptest_probe/{PROPERTIES}?output_mode=json&count=0",
+    f"/services/{PROPERTIES}?output_mode=json&count=0",
     "/services/storage/passwords?output_mode=json&count=0",
+    "/servicesNS/nobody/wptest_probe/storage/passwords?output_mode=json&count=0",
 )
-
 Stanzas = dict[str, dict[str, str]]
 
 
@@ -142,7 +149,10 @@ def log_urllib(server_uri: str, path: str, session_key: str) -> None:
 
 
 def log_entries(path: str, content: bytes) -> None:
-    """Entry names, and for conf stanzas the keys and values (no secrets there)."""
+    """Entry names, and for conf stanzas the keys and values (no secrets there).
+
+    The properties endpoint returns one entry per key with the value as content.
+    """
     try:
         entries = cast(
             "list[dict[str, object]]", json.loads(content.decode()).get("entry", [])
@@ -150,14 +160,20 @@ def log_entries(path: str, content: bytes) -> None:
     except ValueError:
         log(f"rest.entries path={path.split('?')[0]} not JSON")
         return
+    log(f"rest.entries path={path.split('?')[0]} count={len(entries)}")
     for entry in entries:
         name = entry.get("name")
-        body = cast("dict[str, object]", entry.get("content", {}))
+        raw = entry.get("content", {})
         acl = cast("dict[str, object]", entry.get("acl", {}))
+        if not isinstance(raw, dict):
+            log(f"rest.property key={name} value={raw!r}")
+            continue
+        body = cast("dict[str, object]", raw)
         if "storage/passwords" in path:
             log(
                 f"rest.password name={name} realm={body.get('realm')}"
                 f" username={body.get('username')} app={acl.get('app')}"
+                f" sharing={acl.get('sharing')}"
                 f" clear_password.length={len(str(body.get('clear_password', '')))}"
             )
         else:

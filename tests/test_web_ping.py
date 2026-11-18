@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from types import FrameType
 from typing import Callable, Union
@@ -16,9 +16,11 @@ import pytest
 import web_ping
 from logger import log_to_stderr, setup_logging
 from ping_check import CheckResult
-from ping_config import Settings, build_settings
+from ping_config import build_settings
+from wp_context import CheckContext, make_context
 from wp_deadline import Deadline
 from wp_runner import STOP_WAIT
+from wp_splunk import CONF_PATH
 
 SECRET = "s3cr3t-session-key"
 Handler = Union[Callable[[int, Union[FrameType, None]], object], int, None]
@@ -93,6 +95,41 @@ def test_start_line_counts_and_secret_never_logged(
     assert SECRET not in text and SECRET not in err
 
 
+class Splunkd:
+    """Answers the configuration load: [default] with the given thread_limit."""
+
+    def __init__(self, thread_limit: str) -> None:
+        self.thread_limit: str = thread_limit
+
+    def get_json(self, path: str, params: Mapping[str, str]) -> Mapping[str, object]:
+        if path != CONF_PATH:
+            return {"entry": []}
+        content = {"thread_limit": self.thread_limit}
+        return {"entry": [{"name": "wp_defaults", "content": content}]}
+
+
+def test_thread_limit_from_website_monitoring_conf(log_file: Path) -> None:
+    runner = web_ping.build_runner(config_xml(GOOD), Splunkd("50"))
+    _ = runner.shutdown(0)
+    text = log_file.read_text(encoding="utf-8")
+    assert re.search(r" starting stanzas=1 invalid=0 thread_limit=50 ", text)
+    assert " ERROR " not in text
+
+
+def test_unreadable_configuration_runs_nothing(log_file: Path) -> None:
+    """Outside Splunk there is no splunk.rest: the first load fails."""
+    runner = web_ping.build_runner(config_xml(GOOD))
+    runner.tick()
+    runner.heartbeat()
+    _ = runner.shutdown(0)
+    text = log_file.read_text(encoding="utf-8")
+    assert "cannot read configuration from splunkd" in text
+    assert "thread_limit of website_monitoring.conf not known, using 200" in text
+    assert re.search(r" starting stanzas=1 invalid=0 thread_limit=200 ", text)
+    assert " heartbeat stanzas=1 in_flight=0 queued=0 " in text
+    assert SECRET not in text
+
+
 def test_no_valid_stanza_warns_and_idles(log_file: Path) -> None:
     runner = web_ping.build_runner(config_xml(NO_INTERVAL))
     runner.tick()
@@ -135,7 +172,7 @@ def test_run_check_logs_start_and_result(
 ) -> None:
     seen: list[Deadline] = []
 
-    def fake(settings: Settings, deadline: Deadline | None = None) -> CheckResult:
+    def fake(context: CheckContext, deadline: Deadline | None = None) -> CheckResult:
         assert deadline is not None
         seen.append(deadline)
         return CheckResult(None, elapsed=0.25, finished=1.0, error="RefusedError: no")
@@ -145,7 +182,7 @@ def test_run_check_logs_start_and_result(
         "web_ping://t", {"url": "http://example.invalid/", "interval": "60"}
     )
     deadline = Deadline.after(5)
-    result = web_ping.run_check(settings, deadline)
+    result = web_ping.run_check(make_context(settings), deadline)
     assert result.error == "RefusedError: no" and seen == [deadline]
     lines = log_file.read_text(encoding="utf-8").splitlines()
     assert " INFO stanza=web_ping://t v=" in lines[0]

@@ -12,8 +12,9 @@ from dataclasses import dataclass
 from typing import Protocol, cast
 
 from logger import stanza_logger
-from ping_config import DEFAULT_SSL_VERIFY, UNLIMITED_REDIRECTS, Settings
+from ping_config import UNLIMITED_REDIRECTS
 from wp_content import MAX_BODY_BYTES, BodyDecoder, ContentDecodingError, encoding_of
+from wp_context import CheckContext
 from wp_deadline import Deadline
 from wp_http import (
     DeadlineHTTPHandler,
@@ -142,18 +143,17 @@ def _describe(exc: BaseException) -> str:
     return text[:MAX_ERROR_LENGTH]
 
 
-def tls_options(settings: Settings) -> TLSOptions:
-    verify = settings["ssl_verify"]
-    if verify is None:
-        verify = DEFAULT_SSL_VERIFY
-    return TLSOptions(verify=verify, ca_certs=settings["ca_certs"] if verify else None)
+def tls_options(context: CheckContext) -> TLSOptions:
+    verify = context.ssl_verify
+    return TLSOptions(verify=verify, ca_certs=context.ca_certs if verify else None)
 
 
-def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResult:
+def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckResult:
     """Run one check within deadline, by default the stanza's timeout from now.
 
     The deadline covers connecting, every redirect, the headers and the body. Any
     failure once the deadline has expired is a timeout."""
+    settings = context.settings
     slog = stanza_logger(settings["stanza"], settings["log_level"])
     max_redirects = settings["max_redirects"]
     if max_redirects is None:
@@ -164,7 +164,7 @@ def check_url(settings: Settings, deadline: Deadline | None = None) -> CheckResu
         deadline = Deadline(start + timeout)
     sockets = DeadlineSockets(deadline)
     redirects = LimitedRedirectHandler(max_redirects)
-    tls = tls_options(settings)
+    tls = tls_options(context)
     # ProxyHandler({}) ignores proxy environment variables (will be implemented later)
     opener = urllib.request.build_opener(
         urllib.request.ProxyHandler({}),
