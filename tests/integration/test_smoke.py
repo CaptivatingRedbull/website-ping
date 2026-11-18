@@ -40,6 +40,10 @@ APP_INPUTS = "/opt/splunk/etc/apps/website_ping/default/inputs.conf"
 INVALID_STANZAS = {
     "bad-config": "url must use http or https",
     "no-interval": "interval is required",
+    "proxy-socks": (
+        "website_monitoring.conf stanza socks cannot be used, not run:"
+        " proxy_type = socks5 is not supported, only HTTP proxies are"
+    ),
 }
 SETUP_ERROR_STANZAS = {
     "tls-bad-ca-path": "certificates cannot be verified: ca_certs not readable",

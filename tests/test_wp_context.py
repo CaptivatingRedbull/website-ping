@@ -46,6 +46,14 @@ class Splunkd:
             entry("proxied", proxy_server="squid", proxy_port="3128"),
             entry("plain", proxy_server="squid", proxy_password="in-conf"),
             entry("verified", ssl_verify="true", ca_certs="/etc/ca.pem"),
+            entry("socks", proxy_server="squid", proxy_type="socks5"),
+            entry(
+                "noisy",
+                proxy_server="squid",
+                proxy_port="3128",
+                proxy_user="wpproxy",
+                proxy_ignore="target",
+            ),
         ]
         self.passwords: list[dict[str, object]] = [
             entry("x", realm="web_ping://a", username="u", clear_password=PASSWORD),
@@ -226,3 +234,49 @@ def test_a_refresh_failure_keeps_the_contexts() -> None:
     assert contexts.ready()
     context = contexts.context(settings(), debug_log("web_ping://a"))
     assert context is not None and context.password == PASSWORD
+
+
+def test_socks_configuration_does_not_run(log_file: Path) -> None:
+    contexts = make_contexts(Splunkd(), Clock())
+    assert contexts.ready()
+    log = debug_log("web_ping://b")
+    assert contexts.context(settings("b", configuration="socks"), log) is None
+    [error] = [line for line in lines(log_file) if " ERROR " in line]
+    assert "stanza=web_ping://b" in error
+    assert error.endswith(
+        "website_monitoring.conf stanza socks cannot be used, not run:"
+        " proxy_type = socks5 is not supported, only HTTP proxies are"
+    )
+
+
+def test_proxy_warnings_once_per_stanza(log_file: Path) -> None:
+    clock = Clock()
+    splunkd = Splunkd()
+    splunkd.passwords = splunkd.passwords[:1]  # no stored proxy password
+    contexts = make_contexts(splunkd, clock)
+    for _ in range(2):
+        assert contexts.ready()
+        for stanza in ("b", "c", "b"):
+            context = contexts.context(
+                settings(stanza, configuration="noisy"),
+                debug_log(f"web_ping://{stanza}"),
+            )
+            assert context is not None and context.proxy_password is None
+        clock.now += 600
+    ignore = (
+        "website_monitoring.conf stanza noisy: proxy_ignore has no effect on a"
+        " configured proxy, as in Website Monitoring"
+    )
+    no_password = (
+        "website_monitoring.conf stanza noisy: proxy_user is set but no proxy"
+        " password is stored (realm website_monitoring_app_proxy, user"
+        " IN_CONF_FILE); requests go to the proxy without credentials"
+    )
+    warnings = [line for line in lines(log_file) if " WARN " in line]
+    assert len(warnings) == 4
+    for stanza in ("b", "c"):
+        mine = [line for line in warnings if f"stanza=web_ping://{stanza} " in line]
+        assert [line.split(" v=", 1)[1].split(" ", 1)[1] for line in mine] == [
+            ignore,
+            no_password,
+        ]

@@ -137,6 +137,20 @@ def test_parse_squid_line() -> None:
     assert golden.parse_squid_line("2026/11/12 cache.log line") is None
 
 
+def test_parse_squid_log_skips_other_lines() -> None:
+    text = (
+        "2026/11/12 cache.log line\n"
+        "1763000000.5 172.18.0.4 port=3128 TCP_TUNNEL/200 CONNECT target:8443"
+        ' user=- ua="-"\n'
+    )
+    assert golden.parse_squid_log(text) == [
+        (
+            1763000000.5,
+            ProxyRequest("CONNECT", "target:8443", "TCP_TUNNEL/200", "-", "-"),
+        )
+    ]
+
+
 # ---- Diff ------------------------------------------------------------------
 
 
@@ -224,6 +238,16 @@ def test_compare_requests_marks_allowed_fields() -> None:
         "request 0: connection",
     }
     assert golden.failing(diffs) == []
+
+
+def test_compare_proxy_requests_allows_only_the_user_agent() -> None:
+    kept = ProxyRequest("GET", "http://target:8080/a", "TCP_MISS/200", "wpproxy", "old")
+    sent = dataclasses.replace(kept, user_agent="new", user="-")
+    diffs = golden.compare_requests([kept], [sent], golden.PROXY_REQUEST_ALLOWED)
+    assert [str(d) for d in golden.failing(diffs)] == [
+        'request 0: user: expected "wpproxy", got "-"'
+    ]
+    assert [d.field for d in diffs if d.allowed] == ["request 0: user_agent"]
 
 
 def test_compare_requests_reports_order_and_count() -> None:

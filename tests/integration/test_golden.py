@@ -97,10 +97,7 @@ def wait_for_checks(stack: Stack) -> dict[str, int]:
 
 
 def squid_log(stack: Stack) -> list[tuple[float, golden.ProxyRequest]]:
-    parsed = (
-        golden.parse_squid_line(line) for line in stack.logs("squid").splitlines()
-    )
-    return [entry for entry in parsed if entry is not None]
+    return golden.parse_squid_log(stack.logs("squid"))
 
 
 def capture(stack: Stack, evidence: Evidence) -> dict[str, golden.Capture]:

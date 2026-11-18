@@ -11,7 +11,7 @@ import threading
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from typing import IO
+from typing import IO, Optional, cast
 from urllib.parse import urlsplit
 
 from compat import override
@@ -147,6 +147,18 @@ class DeadlineSockets:
             return remaining
         return max(MIN_SOCKET_TIMEOUT, min(configured, remaining))
 
+    def create_connection(
+        self,
+        address: tuple[str, int],
+        timeout: float | None,
+        source_address: tuple[str, int] | None = None,
+    ) -> socket.socket:
+        """socket.create_connection, with the new socket registered before anything
+        is sent on it: expiry then also ends a CONNECT exchange with a proxy."""
+        sock = socket.create_connection(address, timeout, source_address)
+        self.add(sock)
+        return sock
+
     def add(self, sock: socket.socket) -> None:
         with self._lock:
             if not self._shut:
@@ -197,12 +209,13 @@ class DeadlineHTTPConnection(http.client.HTTPConnection):
     ) -> None:
         super().__init__(host, port, timeout, source_address, blocksize)
         self.sockets: DeadlineSockets = sockets
+        # http.client opens its socket through this attribute (Python 3.9 to 3.13).
+        self._create_connection = sockets.create_connection
 
     @override
     def connect(self) -> None:
         self.timeout = self.sockets.timeout(self.timeout)
         super().connect()
-        self.sockets.add(self.sock)
 
 
 class DeadlineHTTPSConnection(http.client.HTTPSConnection):
@@ -214,7 +227,7 @@ class DeadlineHTTPSConnection(http.client.HTTPSConnection):
         source_address: tuple[str, int] | None,
         blocksize: int,
         sockets: DeadlineSockets,
-        context: ssl.SSLContext | None,
+        context: ssl.SSLContext,
     ) -> None:
         super().__init__(
             host,
@@ -225,14 +238,32 @@ class DeadlineHTTPSConnection(http.client.HTTPSConnection):
             blocksize=blocksize,
         )
         self.sockets: DeadlineSockets = sockets
+        self.ssl_context: ssl.SSLContext = context
+        # http.client opens its socket through this attribute (Python 3.9 to 3.13).
+        self._create_connection = sockets.create_connection
 
     @override
     def connect(self) -> None:
-        # The TLS handshake runs inside super().connect(), bounded by the timeout
-        # set here; the socket is registered once it is wrapped.
+        """HTTPSConnection.connect with the handshake split from the wrap.
+
+        wrap_socket detaches the plain socket before its handshake, so a socket
+        registered before the wrap no longer reaches the connection. Here the
+        plain socket is registered as it is created (covering the CONNECT exchange
+        with a proxy), the TLS socket before its handshake: expiry ends a stalled
+        handshake too, directly and through a proxy tunnel. The handshake checks
+        the target's name, not the proxy's.
+        """
         self.timeout = self.sockets.timeout(self.timeout)
-        super().connect()
-        self.sockets.add(self.sock)
+        http.client.HTTPConnection.connect(self)
+        tunnel_host = cast(Optional[str], getattr(self, "_tunnel_host", None))
+        sock = self.ssl_context.wrap_socket(
+            self.sock,
+            server_hostname=tunnel_host or self.host,
+            do_handshake_on_connect=False,
+        )
+        self.sock = sock
+        self.sockets.add(sock)
+        sock.do_handshake()
 
 
 class DeadlineHTTPHandler(urllib.request.HTTPHandler):
@@ -274,10 +305,13 @@ class DeadlineHTTPSHandler(urllib.request.HTTPSHandler):
         self.ssl_context: ssl.SSLContext | None = None
 
     def https_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
-        if self.ssl_context is None:
-            self.ssl_context = self.context()
         order_headers(req)
         return self.do_open(self._connection, req)
+
+    def _current_context(self) -> ssl.SSLContext:
+        if self.ssl_context is None:
+            self.ssl_context = self.context()
+        return self.ssl_context
 
     def _connection(
         self,
@@ -296,5 +330,5 @@ class DeadlineHTTPSHandler(urllib.request.HTTPSHandler):
             source_address,
             blocksize,
             self.sockets,
-            self.ssl_context,
+            self._current_context(),
         )

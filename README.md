@@ -125,6 +125,43 @@ Python 3.9 and 3.13 check certificates the same way: the stricter checks that
 Python 3.13 turns on by default are off, so a certificate accepted on Splunk
 9.4 is accepted on 10.x and the other way round.
 
+## Proxies
+
+An input uses the HTTP proxy of the `website_monitoring.conf` stanza it names with
+`configuration = <name>`, else the one in `[default]`:
+
+```ini
+[corporate]
+proxy_server = proxy.example.com
+proxy_port = 3128
+proxy_user = monitor
+```
+
+That proxy carries every request of the check, redirects included; `proxy_ignore`
+and `NO_PROXY` do not apply to it, as in Website Monitoring. The proxy password
+comes from `storage/passwords`, realm `website_monitoring_app_proxy`, user
+`IN_CONF_FILE`; a `proxy_password` in the file is refused. User and password may
+contain any character, `@`, `:` and `%` included. For https the input opens a
+CONNECT tunnel; certificate checks and the TLS 1.2 minimum apply to the site
+behind it, and the timeout covers the tunnel too.
+
+Without a proxy in its stanza, an input uses the proxy from splunkd's environment
+(for example set in `$SPLUNK_HOME/etc/splunk-launch.conf`): `HTTP_PROXY` for http
+URLs, `HTTPS_PROXY` for https URLs. Hosts listed in `NO_PROXY` or in the stanza's
+`proxy_ignore` are reached directly; `proxy_ignore = *` turns environment proxies
+off. Unlike Website Monitoring, `proxy_ignore` applies only to the inputs that use
+its stanza, and the environment is never changed. Only `http://` proxy URLs are
+supported; another scheme gives an event with an `error`.
+
+SOCKS proxies (`proxy_type = socks4` or `socks5`) are not supported: inputs that use
+such a stanza do not run, and `website_ping.log` has an ERROR that names the input
+and the stanza.
+
+Events carry the stanza's `proxy_server`, `proxy_type`, `proxy_port` and, if set,
+`proxy_user`, whichever way the request went, as Website Monitoring reported them.
+With `log_level = DEBUG`, every request logs its route without the password:
+`direct`, `env http://proxy:3128` or `conf corporate http://proxy:3128 user=monitor`.
+
 ## Logging
 
 The input writes its log to `$SPLUNK_HOME/var/log/splunk/website_ping.log`,

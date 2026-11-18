@@ -111,6 +111,46 @@ def test_requests_match_golden(
         pytest.fail("\n".join(lines + [f"  {line}" for line in failing]), pytrace=False)
 
 
+def first_proxy_requests(
+    stack: Stack, scenario: parity.ParityScenario, count: int
+) -> list[golden.ProxyRequest] | None:
+    """The scenario's first count requests through Squid since the mark, or None
+    until logged."""
+    sent = [
+        request
+        for logged, request in golden.parse_squid_log(stack.logs("squid"))
+        if logged >= stack.mark and scenario.matches_proxy(request.url)
+    ]
+    return sent[:count] if len(sent) >= count else None
+
+
+@pytest.mark.parametrize("title", parity.PROXIES_COMPARED)
+def test_proxy_requests_match_golden(
+    parity_stack: Stack, title: str, evidence: Evidence
+) -> None:
+    scenario = parity.by_title()[title]
+    fixture = golden.read_capture(GOLDEN_DIR, title)
+    assert fixture.proxy_requests, f"{title}: the fixture has no proxy request"
+    sent = wait_for(
+        INDEXED,
+        lambda: first_proxy_requests(
+            parity_stack, scenario, len(fixture.proxy_requests)
+        ),
+        EVENT_TIMEOUT,
+        parity_stack.stages,
+    )
+    diffs = golden.compare_requests(
+        fixture.proxy_requests, sent, golden.PROXY_REQUEST_ALLOWED
+    )
+    evidence.note(
+        f"{parity_stack.project}.parity-proxy.{title}", [str(d) for d in diffs]
+    )
+    failing = [str(diff) for diff in golden.failing(diffs)]
+    if failing:
+        lines = [f"{title}: {len(failing)} proxy request field(s) differ from 2.9.7"]
+        pytest.fail("\n".join(lines + [f"  {line}" for line in failing]), pytrace=False)
+
+
 @pytest.mark.parametrize("title", sorted(parity.REFUSED))
 def test_refused_stanza_logs_an_error_and_is_not_run(
     parity_stack: Stack, title: str

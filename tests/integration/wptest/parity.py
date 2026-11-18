@@ -209,7 +209,6 @@ CONF_STANZAS: Mapping[str, Mapping[str, str]] = MappingProxyType(
 _CONTENT = "needs content checks"
 _BODY = "needs the response body event"
 _AUTH = "needs HTTP authentication with passwords from storage/passwords"
-_PROXY = "needs proxy configuration from website_monitoring.conf"
 
 PENDING: Mapping[str, str] = MappingProxyType(
     {
@@ -229,9 +228,6 @@ PENDING: Mapping[str, str] = MappingProxyType(
             _AUTH,
         ),
         **dict.fromkeys(("mtls-combined", "mtls-split"), "needs client certificates"),
-        **dict.fromkeys(
-            ("proxy-plain", "proxy-https", "proxy-auth", "proxy-ignore"), _PROXY
-        ),
     }
 )
 """Scenarios website-ping cannot match yet, with the missing feature. They are
@@ -255,6 +251,19 @@ REQUESTS_COMPARED: tuple[str, ...] = (
 )
 """Compared scenarios whose target request log is compared with the fixture too:
 header names, order and values, cookies, Host and the request line."""
+
+
+PROXIES_COMPARED: tuple[str, ...] = (
+    "proxy-plain",
+    "proxy-https",
+    "proxy-auth",
+    "proxy-ignore",
+)
+"""Compared scenarios whose Squid log is compared with the fixture too: method,
+URL, result and proxy user of every request through the proxy."""
+
+PROXY_REALM = "website_monitoring_app_proxy"
+PROXY_USERNAME = "IN_CONF_FILE"
 
 
 def compared_scenarios(
@@ -295,22 +304,60 @@ def inputs_conf(scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS) -> str:
     return INPUTS_HEADER + "\n" + "\n".join(stanzas)
 
 
-def website_monitoring_conf(
-    scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
-) -> str:
-    """local/website_monitoring.conf: [default] plus every stanza a scenario names."""
+def _conf_names(scenarios: Sequence[ParityScenario]) -> list[str]:
     names = ["default"] + sorted({s.conf for s in scenarios if s.conf is not None})
     missing = [name for name in names if name not in CONF_STANZAS]
     if missing:
         raise ValueError(f"unknown website_monitoring.conf stanzas: {missing}")
-    stanzas = [_stanza_text(name, CONF_STANZAS[name]) for name in names]
+    return names
+
+
+def website_monitoring_conf(
+    scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
+    *,
+    stored_proxy_password: bool = False,
+) -> str:
+    """website_monitoring.conf: [default] plus every stanza a scenario names.
+
+    With stored_proxy_password, proxy_password is left out: website-ping refuses
+    a plain one, so the parity stack stores it (passwords) instead.
+    """
+    stanzas = [
+        _stanza_text(
+            name,
+            {
+                key: value
+                for key, value in CONF_STANZAS[name].items()
+                if not (stored_proxy_password and key == "proxy_password")
+            },
+        )
+        for name in _conf_names(scenarios)
+    ]
     return INPUTS_HEADER + "\n" + "\n".join(stanzas)
 
 
 def passwords(
     scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
+    *,
+    stored_proxy_password: bool = False,
 ) -> list[Password]:
-    return [s.password for s in scenarios if s.password is not None]
+    """The storage/passwords entries the scenarios need. With
+    stored_proxy_password, also the proxy password of the stanzas they name."""
+    entries = [s.password for s in scenarios if s.password is not None]
+    if stored_proxy_password:
+        proxy_passwords = sorted(
+            {
+                CONF_STANZAS[name]["proxy_password"]
+                for name in _conf_names(scenarios)
+                if "proxy_password" in CONF_STANZAS[name]
+            }
+        )
+        if len(proxy_passwords) > 1:
+            raise ValueError(
+                "storage/passwords holds one proxy password for all stanzas"
+            )
+        entries += [(PROXY_REALM, PROXY_USERNAME, p) for p in proxy_passwords]
+    return entries
 
 
 def by_title(

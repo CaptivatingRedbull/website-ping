@@ -23,6 +23,8 @@ from wp_http import (
     LimitedRedirectHandler,
     request_headers,
 )
+from wp_proxy import ProxyRoute, ProxyRouteHandler, UnsupportedProxyError, resolve_proxy
+from wp_splunk import ProxyConf
 from wp_tls import CONTEXTS, TLSOptions, TLSSetupError, describe_tls_error
 from wp_url import HostNameError, prepare_url
 
@@ -42,6 +44,18 @@ class ProxyInfo:
 
 NO_PROXY = ProxyInfo()
 """What Website Monitoring reported when no proxy was configured."""
+
+
+def proxy_info(proxy: ProxyConf) -> ProxyInfo:
+    """The proxy fields of the input's website_monitoring.conf stanza, as written
+    there, whether a request went through that proxy, an environment proxy or
+    none: Website Monitoring reported the stanza."""
+    return ProxyInfo(
+        server=proxy.proxy_server,
+        type=proxy.proxy_type,
+        port=proxy.proxy_port,
+        user=proxy.proxy_user,
+    )
 
 
 @dataclass(frozen=True)
@@ -165,9 +179,19 @@ def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckR
     sockets = DeadlineSockets(deadline)
     redirects = LimitedRedirectHandler(max_redirects)
     tls = tls_options(context)
-    # ProxyHandler({}) ignores proxy environment variables (will be implemented later)
+    env_proxies = urllib.request.getproxies_environment()
+
+    def route(url: str) -> ProxyRoute:
+        return resolve_proxy(
+            url,
+            context.proxy,
+            context.proxy_password,
+            env_proxies,
+            settings["configuration"],
+        )
+
     opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({}),
+        ProxyRouteHandler(route, slog),
         DeadlineHTTPHandler(sockets),
         DeadlineHTTPSHandler(sockets, lambda: CONTEXTS.get(tls, slog)),
         redirects,
@@ -190,6 +214,7 @@ def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckR
             timed_out=timed_out,
             error=error,
             exceeded_redirects=exceeded_redirects,
+            proxy=proxy_info(context.proxy),
         )
 
     try:
@@ -199,8 +224,8 @@ def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckR
             method="GET",
         )
         code, body = _fetch(opener, request, timeout, deadline, sockets)
-    except TLSSetupError as exc:
-        # Raised before the first HTTPS connection opens: nothing was sent.
+    except (TLSSetupError, UnsupportedProxyError) as exc:
+        # Raised before the connection of a request opens: nothing was sent.
         return result(None, error=str(exc)[:MAX_ERROR_LENGTH])
     except Exception as exc:  # noqa: BLE001 - a check must always produce an event
         # After expiry the sockets were shut down under the check: whatever that

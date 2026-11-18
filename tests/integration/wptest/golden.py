@@ -70,6 +70,11 @@ REQUEST_ALLOWED: Mapping[str, str] = {
     "user_agent": "the default user agent names website-ping",
 }
 
+PROXY_REQUEST_ALLOWED: Mapping[str, str] = {
+    # ProxyRequest field -> reason, for every compared request through Squid.
+    "user_agent": "the default user agent names website-ping",
+}
+
 EXPORT_FIELDS = "wptest_raw wptest_time wptest_indextime wptest_cd wptest_server"
 EXPORT_QUERY = (
     'search index=main (sourcetype=web_ping OR sourcetype="web_ping:response")'
@@ -334,6 +339,12 @@ _SQUID = re.compile(
 )
 
 
+def parse_squid_log(text: str) -> list[tuple[float, ProxyRequest]]:
+    """The requests of a Squid access log in the wptest format, with their times."""
+    parsed = (parse_squid_line(line) for line in text.splitlines())
+    return [entry for entry in parsed if entry is not None]
+
+
 def parse_squid_line(line: str) -> tuple[float, ProxyRequest] | None:
     """A line of the wptest log format in squid.conf, or None for anything else."""
     match = _SQUID.match(line.strip())
@@ -549,18 +560,18 @@ def failing(diffs: Sequence[FieldDiff]) -> list[FieldDiff]:
 
 
 def compare_requests(
-    golden: Sequence[TargetRequest],
-    actual: Sequence[TargetRequest],
+    golden: Sequence[TargetRequest] | Sequence[ProxyRequest],
+    actual: Sequence[TargetRequest] | Sequence[ProxyRequest],
     allowed: Collection[str] = (),
 ) -> list[FieldDiff]:
-    """Every difference between two request logs, field by field, prefixed with
-    the request's position, such as "request 1: header_names". Differences on
-    allowed fields are returned with allowed=True."""
+    """Every difference between two request logs (target or Squid), field by
+    field, prefixed with the request's position, such as "request 1:
+    header_names". Differences on allowed fields are returned with allowed=True."""
     diffs: list[FieldDiff] = []
     if len(golden) != len(actual):
         diffs.append(FieldDiff("request count", str(len(golden)), str(len(actual))))
     for index, (expected, got) in enumerate(zip(golden, actual)):
-        for item in dataclass_fields(TargetRequest):
+        for item in dataclass_fields(expected):
             want, have = getattr(expected, item.name), getattr(got, item.name)
             if want != have:
                 diffs.append(

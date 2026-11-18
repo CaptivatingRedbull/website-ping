@@ -48,7 +48,8 @@ REFRESH_SECONDS = 600.0
 RETRY_SECONDS = 30.0
 """Until the first load succeeds, no check runs; it is retried this often."""
 MAX_ERROR_LENGTH = 200
-
+SOCKS_PROXY_TYPES = frozenset({"socks4", "socks5"})
+SOCKS_REFUSED = "proxy_type = {proxy_type} is not supported, only HTTP proxies are"
 PROXY_PASSWORD_REFUSED = (
     "proxy_password in website_monitoring.conf is not supported; store it in"
     f" storage/passwords, realm {PROXY_REALM}, user {PROXY_USERNAME}"
@@ -225,19 +226,34 @@ def _text(values: Mapping[str, str], key: str) -> str:
     return values.get(key, "").strip()
 
 
+def _proxy(values: Mapping[str, str]) -> ProxyConf:
+    """Raises ConfigError for a proxy that cannot be used. A check sent directly
+    instead would report the site as down when only the proxy setting is wrong."""
+    proxy = ProxyConf(
+        proxy_type=_text(values, "proxy_type") or "http",
+        proxy_server=_text(values, "proxy_server"),
+        proxy_port=_text(values, "proxy_port"),
+        proxy_user=_text(values, "proxy_user"),
+        proxy_ignore=_text(values, "proxy_ignore"),
+    )
+    if not proxy.proxy_server:
+        return proxy
+    if proxy.proxy_type.lower() in SOCKS_PROXY_TYPES:
+        raise ConfigError(SOCKS_REFUSED.format(proxy_type=proxy.proxy_type))
+    port = proxy.proxy_port
+    if port and not (port.isascii() and port.isdigit() and 0 < int(port) < 65536):
+        raise ConfigError(f"proxy_port must be a number from 1 to 65535, got {port!r}")
+    return proxy
+
+
 def _configuration(values: Mapping[str, str]) -> Configuration:
     """Raises ConfigError for a value that makes the stanza unusable."""
     if _text(values, "proxy_password"):
         raise ConfigError(PROXY_PASSWORD_REFUSED)
+    proxy = _proxy(values)
     verify = parse_bool("ssl_verify", values.get("ssl_verify", ""))
     return Configuration(
-        proxy=ProxyConf(
-            proxy_type=_text(values, "proxy_type") or "http",
-            proxy_server=_text(values, "proxy_server"),
-            proxy_port=_text(values, "proxy_port"),
-            proxy_user=_text(values, "proxy_user"),
-            proxy_ignore=_text(values, "proxy_ignore"),
-        ),
+        proxy=proxy,
         ssl_verify=DEFAULT_SSL_VERIFY if verify is None else verify,
         ca_certs=_text(values, "ca_certs") or None,
     )

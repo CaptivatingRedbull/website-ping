@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,20 @@ INTEGRATION_PATH = "tests/integration"
 collect_ignore: list[str] = (
     [] if any(INTEGRATION_PATH in arg for arg in sys.argv[1:]) else ["integration"]
 )
+
+
+@pytest.fixture(autouse=True)
+def no_proxy_variables(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unit tests talk to loopback servers, and checks honour proxy variables: a
+    proxy set on the machine running the tests must not route those requests.
+    A test that needs one sets it itself. The integration tests keep them."""
+    if "integration" in request.path.parts:
+        return
+    for name in list(os.environ):
+        if name.lower().endswith("_proxy"):
+            monkeypatch.delenv(name)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

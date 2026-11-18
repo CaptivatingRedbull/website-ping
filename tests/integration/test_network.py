@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import configparser
 import time
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 import pytest
@@ -21,6 +22,8 @@ PROXY = "http://squid:3128"
 PROXY_VARIABLES = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
 QUIET_WINDOW = 45
 T = "http://target:8080"
+ENV_PROXIED = "http://env-proxied:8080"
+"""The target under a name that is not in NO_PROXY."""
 HARNESS_CA = "/tmp/wptest-ca.pem"
 VERIFIED = {"ssl_verify": "true", "ca_certs": HARNESS_CA}
 """Certificate checks against the harness CA. With the default (no checks), the
@@ -76,8 +79,11 @@ SCENARIOS = [
              settings={"ssl_verify": "true", "ca_certs": "/nonexistent.pem"}),
     Scenario("tls-old-protocol", "https://target:8448/", 15, None, False,
              "TLS handshake failed"),
-    Scenario("proxy-ignored", f"{T}/status/200", 15, 200, False,
-             settings={"user_agent": "wptest-proxy-ignored"}),
+    Scenario("proxy-env", f"{ENV_PROXIED}/status/200", 15, 200, False,
+             settings={"user_agent": "wptest-proxy-env"}),
+    Scenario("proxy-env-ignored", f"{ENV_PROXIED}/status/200", 15, 200, False,
+             settings={"configuration": "ignore-all",
+                       "user_agent": "wptest-proxy-env-ignored"}),
 ]  # fmt: skip
 
 
@@ -111,7 +117,24 @@ def squid_lines(stack: Stack, user_agent: str) -> int:
     )
 
 
-def check_proxy_ignored(stack: Stack) -> None:
+def check_input_environment(stack: Stack) -> None:
+    environment = stack.input_process("so1")
+    for name in PROXY_VARIABLES:
+        assert environment.get(name) == PROXY, f"{name} in the input's environment"
+
+
+def check_env_proxy_used(stack: Stack) -> None:
+    check_input_environment(stack)
+    wait_for(
+        "squid logged the input",
+        lambda: True if squid_lines(stack, "wptest-proxy-env") else None,
+        30,
+        stack.stages,
+        interval=1,
+    )
+
+
+def check_env_proxy_ignored(stack: Stack) -> None:
     control = stack.exec(
         "so1",
         f"curl -sS -o /dev/null -w '%{{http_code}}' --noproxy '' -x {PROXY}"
@@ -127,11 +150,18 @@ def check_proxy_ignored(stack: Stack) -> None:
         stack.stages,
         interval=1,
     )
-    environment = stack.input_process("so1")
-    for name in PROXY_VARIABLES:
-        assert environment.get(name) == PROXY, f"{name} in the input's environment"
+    check_input_environment(stack)
     time.sleep(QUIET_WINDOW)
-    assert squid_lines(stack, "wptest-proxy-ignored") == 0, "the input used the proxy"
+    assert squid_lines(stack, "wptest-proxy-env-ignored") == 0, (
+        "the input used the proxy"
+    )
+
+
+PROXY_CHECKS: dict[str, Callable[[Stack], None]] = {
+    "proxy-env": check_env_proxy_used,
+    "proxy-env-ignored": check_env_proxy_ignored,
+}
+"""Checks of the Squid log after a scenario's events arrived."""
 
 
 def test_config_app_matches_the_table() -> None:
@@ -153,8 +183,8 @@ def test_config_app_matches_the_table() -> None:
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda scenario: scenario.title)
 def test_scenario(standalone: Stack, scenario: Scenario, evidence: Evidence) -> None:
     events = wait_for_events(standalone, scenario.title)
-    if scenario.title == "proxy-ignored":
-        check_proxy_ignored(standalone)
+    if scenario.title in PROXY_CHECKS:
+        PROXY_CHECKS[scenario.title](standalone)
     searched_at = time.time()
     requests = standalone.target_requests(scenario.title) if scenario.requests else None
     times = request_times(standalone, scenario) if scenario.max_duration else []

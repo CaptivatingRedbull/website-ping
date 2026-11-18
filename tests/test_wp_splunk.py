@@ -242,16 +242,58 @@ def test_invalid_ssl_verify_refuses_the_configuration() -> None:
 
 def test_proxy_settings_are_stripped_text() -> None:
     values = {
-        "proxy_type": " socks5 ",
+        "proxy_type": " HTTP ",
         "proxy_server": "proxy.example",
-        "proxy_port": "1080",
+        "proxy_port": "3128",
         "proxy_user": "bob",
         "proxy_ignore": "*.local",
     }
-    app, _ = build_app_config(conf_document({"wp_defaults": {}, "socks": values}))
-    assert app.configuration("socks") == Configuration(
-        proxy=ProxyConf("socks5", "proxy.example", "1080", "bob", "*.local")
+    app, _ = build_app_config(conf_document({"wp_defaults": {}, "named": values}))
+    assert app.configuration("named") == Configuration(
+        proxy=ProxyConf("HTTP", "proxy.example", "3128", "bob", "*.local")
     )
+
+
+@pytest.mark.parametrize("proxy_type", ["socks4", "socks5", " SOCKS5 "])
+def test_socks_proxy_refuses_the_configuration(proxy_type: str) -> None:
+    values = {"proxy_type": proxy_type, "proxy_server": "p", "proxy_port": "1080"}
+    app, _ = build_app_config(conf_document({"wp_defaults": {}, "socks": values}))
+    assert app.configuration("socks") is None
+    assert app.refusal("socks") == (
+        f"proxy_type = {proxy_type.strip()} is not supported, only HTTP proxies are"
+    )
+
+
+def test_socks_type_without_a_server_is_no_proxy() -> None:
+    values = {"proxy_type": "socks5", "proxy_ignore": "*"}
+    app, _ = build_app_config(conf_document({"wp_defaults": {}, "env": values}))
+    assert app.configuration("env") == Configuration(
+        proxy=ProxyConf(proxy_type="socks5", proxy_ignore="*")
+    )
+
+
+@pytest.mark.parametrize("port", ["abc", "0", "65536", "-1", "31 28", "\u00b2"])
+def test_invalid_proxy_port_refuses_the_configuration(port: str) -> None:
+    values = {"proxy_server": "p", "proxy_port": port}
+    app, _ = build_app_config(conf_document({"wp_defaults": {}, "bad": values}))
+    assert app.configuration("bad") is None
+    assert app.refusal("bad") == (
+        f"proxy_port must be a number from 1 to 65535, got {port.strip()!r}"
+    )
+
+
+@pytest.mark.parametrize("port", ["", "1", "3128", "65535"])
+def test_valid_or_blank_proxy_port(port: str) -> None:
+    values = {"proxy_server": "p", "proxy_port": port}
+    app, _ = build_app_config(conf_document({"wp_defaults": {}, "ok": values}))
+    assert app.configuration("ok") == Configuration(
+        proxy=ProxyConf(proxy_server="p", proxy_port=port)
+    )
+
+
+def test_invalid_port_without_a_server_is_ignored() -> None:
+    app, _ = build_app_config(conf_document({"wp_defaults": {"proxy_port": "x"}}))
+    assert app.configuration("") == Configuration(proxy=ProxyConf(proxy_port="x"))
 
 
 def test_blank_proxy_type_is_http() -> None:

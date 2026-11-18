@@ -11,6 +11,7 @@ from target import server
 from wptest import parity
 from wptest.parity import PARITY_SCENARIOS, ParityScenario
 from wptest.preflight import ALLOWED_STANZA_HOSTS
+from wptest.stack import PROXY_PASSWORD, PROXY_USER
 
 
 def parse(text: str) -> configparser.ConfigParser:
@@ -63,6 +64,29 @@ def test_website_monitoring_conf_has_default_and_named_stanzas() -> None:
     assert parser.sections() == ["default", "auth", "ignore", "plain"]
     assert "proxy_server" not in parser["default"]
     assert parser["ignore"]["proxy_ignore"] == "target"
+
+
+def test_website_ping_conf_stores_the_proxy_password_instead() -> None:
+    configured = parity.configured_scenarios()
+    parser = parse(
+        parity.website_monitoring_conf(configured, stored_proxy_password=True)
+    )
+    assert parser.sections() == ["default", "auth", "ignore", "plain"]
+    assert "proxy_password" not in parser["auth"]
+    assert parser["auth"]["proxy_user"] == PROXY_USER
+    assert parity.passwords(configured, stored_proxy_password=True) == [
+        ("website_monitoring_app_proxy", "IN_CONF_FILE", PROXY_PASSWORD)
+    ]
+    assert parse(parity.website_monitoring_conf())["auth"]["proxy_password"] == (
+        PROXY_PASSWORD
+    )
+    assert parity.passwords(configured) == []
+
+
+def test_compared_proxy_logs_belong_to_compared_proxy_scenarios() -> None:
+    compared = {s.title: s for s in parity.compared_scenarios()}
+    for title in parity.PROXIES_COMPARED:
+        assert compared[title].conf is not None, title
 
 
 def test_hosts_pass_the_preflight() -> None:

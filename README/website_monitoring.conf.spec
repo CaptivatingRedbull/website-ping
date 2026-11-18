@@ -13,19 +13,25 @@
 # Every setting below is valid in [default] and in a named stanza.
 
 proxy_server = <string>
-* The proxy server to use, as a host name or IP address.
+* The HTTP proxy that every request of the inputs using the stanza goes
+  through, redirects included. proxy_ignore and NO_PROXY do not apply to it.
 * Examples: 1.2.3.4, proxy.example.com
-* Default: blank (no proxy)
+* Default: blank (no proxy from this file; see proxy_ignore)
 
 proxy_port = <integer>
-* The port of the proxy server.
+* The port of the proxy server, from 1 to 65535.
+* Blank means port 80; the input logs a warning.
+* Any other value makes the stanza unusable: inputs that use it do not run and
+  log an ERROR.
 * Example: 8080
 * Default: blank
 
 proxy_user = <string>
-* The user name for the proxy server.
+* The user name for the proxy server, sent with Basic authentication.
 * The password is read from storage/passwords, realm
   website_monitoring_app_proxy, user name IN_CONF_FILE.
+* Without a stored password, requests go to the proxy without credentials and
+  the input logs a warning.
 * Default: blank (no proxy authentication)
 
 proxy_password = <string>
@@ -35,11 +41,21 @@ proxy_password = <string>
   website_monitoring_app_proxy, user name IN_CONF_FILE.
 
 proxy_type = <string>
-* The protocol of the proxy server.
+* The protocol of the proxy server: http. Upper or lower case.
+* socks4 and socks5 are NOT SUPPORTED: with a proxy_server set, inputs that use
+  the stanza do not run and log an ERROR.
+* Any other value: proxy_server is not used, and the input logs a warning.
 * Default: http
 
 proxy_ignore = <string>
-* A comma-separated list of hosts that are not reached through a proxy.
+* A comma-separated list of hosts that are reached directly instead of through
+  a proxy from the environment (HTTP_PROXY for http URLs, HTTPS_PROXY for
+  https URLs), in addition to the hosts in NO_PROXY.
+* Has no effect on proxy_server, as in Website Monitoring: the input logs a
+  warning if both are set.
+* An entry matches a host name and its subdomains (example.com also matches
+  www.example.com; a leading dot is ignored), a host and port
+  (example.com:8080), an IP address, or a network in CIDR form (10.0.0.0/8).
 * The value * turns off proxies taken from the environment.
 * Example: example.com,example.net
 * Default: blank

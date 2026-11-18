@@ -545,11 +545,25 @@ def setup_parity(stack: Stack, manager: StackManager) -> None:
     _start(stack, manager)
     _deliver_helpers(stack, manager, ("so1",))
     _probe(stack, manager, ("so1",))
+    configured = parity.configured_scenarios()
+    # Stored before the inputs start, in another app than website_ping, as an
+    # admin of Website Monitoring would have them.
+    rest = stack.rest("so1")
+    for realm, username, password in parity.passwords(
+        configured, stored_proxy_password=True
+    ):
+        _ = rest.post(
+            "/servicesNS/nobody/search/storage/passwords",
+            {"name": username, "password": password, "realm": realm},
+        )
     archive = install.build_config_app(
         APPS_DIR / "parity",
         manager.workdir / f"website_ping_inputs-parity-{stack.runtime.id}.tar.gz",
         extra={
-            "default/inputs.conf": parity.inputs_conf(parity.configured_scenarios()),
+            "default/inputs.conf": parity.inputs_conf(configured),
+            "default/website_monitoring.conf": parity.website_monitoring_conf(
+                configured, stored_proxy_password=True
+            ),
             **install.python_override(stack.runtime),
         },
     )

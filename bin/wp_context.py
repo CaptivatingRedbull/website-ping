@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from logger import StanzaLogger
 from ping_config import DEFAULT_SSL_VERIFY, Settings
+from wp_proxy import proxy_warnings
 from wp_splunk import (
     BUILTIN,
     DEFAULT_MAX_RESPONSE_BODY_LENGTH,
@@ -78,6 +79,8 @@ class ConfigContexts:
         self._cache: ConfigCache = cache
         self._snapshot: Snapshot | None = None
         self._warned_unknown: set[str] = set()
+        self._warned_proxy: set[tuple[str, str]] = set()
+        """(stanza, warning) pairs already logged."""
         self._logged: dict[tuple[str, str], int] = {}
         """(stanza, what) -> generation it was last logged for."""
 
@@ -119,11 +122,16 @@ class ConfigContexts:
         found = password is not None
         if found and self._first("password", stanza, snapshot.generation):
             log.debug("password found for stanza")
+        proxy_password = snapshot.passwords.proxy_password()
+        for warning in proxy_warnings(configuration.proxy, proxy_password):
+            if (stanza, warning) not in self._warned_proxy:
+                self._warned_proxy.add((stanza, warning))
+                log.warning("website_monitoring.conf stanza %s: %s", name, warning)
         return make_context(
             settings,
             configuration,
             password=password,
-            proxy_password=snapshot.passwords.proxy_password(),
+            proxy_password=proxy_password,
             max_response_body_length=app.max_response_body_length,
         )
 

@@ -23,6 +23,7 @@ EXPECTED_FILES = {
     "bin/wp_deadline.py",
     "bin/wp_event_fields.py",
     "bin/wp_http.py",
+    "bin/wp_proxy.py",
     "bin/wp_runner.py",
     "bin/wp_splunk.py",
     "bin/wp_tls.py",
