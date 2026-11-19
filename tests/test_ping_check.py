@@ -24,7 +24,7 @@ from ping_events import escape_value
 from target import server
 from wp_content import MAX_BODY_BYTES
 from wp_context import CheckContext, make_context
-from wp_deadline import Deadline
+from wp_deadline import Phases
 from wptest import golden, legacy, parity
 
 
@@ -234,9 +234,9 @@ def test_unexpected_exception_still_gives_a_result(
 
 
 def test_expired_deadline_ends_the_body_read(base_url: str) -> None:
-    deadline = Deadline(time.monotonic() + 30)
-    deadline.expire()
-    r = check_url(make(base_url + "/ok"), deadline)
+    phases = Phases()
+    phases.stop()
+    r = check_url(make(base_url + "/ok"), phases)
     assert r.timed_out and r.response_code is None
 
 
@@ -324,11 +324,11 @@ def test_expiry_ends_a_trickle(
     # Each byte arrives well within the socket timeout, so only the expiry (the
     # runner's tick in production, a timer here) can end the check.
     server = TrickleServer(trickle, 0.1, tls_files if tls else None)
-    deadline = Deadline(time.monotonic() + 30)
-    timer = threading.Timer(1.0, deadline.expire)
+    phases = Phases()
+    timer = threading.Timer(1.0, phases.stop)
     timer.start()
     try:
-        r = check_url(make(server.url, timeout="30"), deadline)
+        r = check_url(make(server.url, timeout="30"), phases)
     finally:
         timer.join()
         server.close()

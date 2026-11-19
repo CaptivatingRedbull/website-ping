@@ -70,9 +70,25 @@ need a feature website-ping does not have yet: they are skipped with that
 feature as the reason and left out of the stack's config. Scenarios in
 `parity.REFUSED` are refused by website-ping on purpose: they stay in the
 config and the test expects their ERROR in `website_ping.log`, no event and no
-request. For the scenarios in `parity.REQUESTS_COMPARED` the target's request
-log is compared with the fixture as well (`golden.compare_requests`, allowed
-differences in `REQUEST_ALLOWED`).
+request. Scenarios in `parity.INTENDED` differ from 2.9.7 on purpose in a way the
+event comparison cannot express (`ntlm-offered`: an event with the site's 401,
+where 2.9.7 wrote none); they stay in the config and have their own test. For
+the scenarios in `parity.REQUESTS_COMPARED` the target's request log is compared
+with the fixture as well (`golden.compare_requests`, allowed differences in
+`REQUEST_ALLOWED`): header names and order, the authentication scheme of each
+request and the client certificate's name, so the number of requests per check
+must equal 2.9.7's.
+
+The parity stack stores every password in `storage/passwords` (in the `search`
+app) before the inputs start; its generated `inputs.conf` and
+`website_monitoring.conf` contain none. `test_no_credential_in_any_log_or_event`
+then searches the Splunk instance's log folder, the input's checkpoints, the
+files of website-ping and its config app, the container logs of the target,
+Squid and Splunk, and every indexed `web_ping` event for each test password
+(as written, percent-encoded and as a Basic token). It never runs a Splunk
+search for a password, so its own search history cannot match. The result is
+in `record.json` under `<stack>.credential-scan`, with labels instead of the
+passwords.
 
 ## Isolation rules
 

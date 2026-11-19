@@ -63,6 +63,8 @@ that is not done by then gives an event with `timed_out=True` and an empty
 `response_code`, even if a status line had already arrived. Website Monitoring
 applied `timeout` to each network operation instead, so a slow server could keep
 one of its checks busy far longer.
+An input with HTTP authentication first asks
+the site for its scheme, with its own `timeout` (see Authentication).
 
 `max_redirects` is the number of redirects a check follows (301, 302, 303, 307
 and 308). On the next redirect the check stops with `exceeded_redirects=True` and
@@ -74,6 +76,36 @@ Known limits of the timeout: resolving the host name (DNS) cannot be interrupted
 and can take longer than `timeout`, as with Website Monitoring. A server that
 sends its TLS handshake slowly, a few bytes at a time, can also hold a check
 beyond `timeout`.
+
+## Authentication
+
+An input with `username` sends credentials when `storage/passwords` holds a
+password with realm `web_ping://<name>`, in any app the input can read. A
+`password` in `inputs.conf` and a user name or password in the URL are rejected:
+the input does not run and logs an ERROR.
+
+Like Website Monitoring, each check first sends one request without credentials
+and reads the scheme from the `WWW-Authenticate` headers of the answer. That
+request has its own `timeout` and is not part of `total_time`, so a check with
+authentication can take up to twice `timeout`. If it fails, Basic is used.
+
+* Basic: the credentials go with the timed request and with every redirect to
+  the same host name. A wrong password gives `response_code=401`.
+* Digest: the timed request goes out without credentials and the site's
+  challenge is answered once, within the same `timeout`; a second `401` is the
+  result. Algorithms `MD5`, `MD5-sess`, `SHA` and `SHA-256`, with `qop=auth` or
+  without qop. The hashes are computed as not used for security, so Digest also
+  works on FIPS hosts. Any other challenge (for example `SHA-512` or `auth-int`
+  alone) is not answered: the event shows the `401` and one WARN per input says
+  why.
+* NTLM and Negotiate: not supported. Requests are sent without credentials, so
+  the event shows the site's `401`, and one WARN per input says why. Website
+  Monitoring wrote no event at all for a site that offered NTLM.
+* Any other scheme: Basic credentials, as Website Monitoring sent, with one WARN
+  per input.
+
+Without a stored password, requests are sent without credentials and one WARN
+per input says so. Passwords and `Authorization` values are never logged.
 
 ## Certificates and TLS
 
@@ -124,6 +156,16 @@ Website Monitoring still accepted those sites.
 Python 3.9 and 3.13 check certificates the same way: the stricter checks that
 Python 3.13 turns on by default are off, so a certificate accepted on Splunk
 9.4 is accepted on 10.x and the other way round.
+
+A site that requires a client certificate gets the one in `client_certificate`
+(PEM, with the key in the same file or in `client_certificate_key`), with or
+without verification, also through a proxy. Encrypted keys are not supported, as
+in Website Monitoring. If the files cannot be read, the key does not match the
+certificate or it is encrypted, the check sends no request; `error` starts with
+`client certificate:` and names the file, for example
+`client certificate: key does not match the certificate: <path>`, and
+`website_ping.log` gets one ERROR line. Like the CA file, the certificate is
+read once and a changed file takes effect at the next restart.
 
 ## Proxies
 

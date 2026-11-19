@@ -12,8 +12,20 @@ from dataclasses import dataclass
 from email.message import Message
 from typing import Protocol, cast
 
-from logger import stanza_logger
+from logger import StanzaLogger, stanza_logger
 from ping_config import UNLIMITED_REDIRECTS, Settings
+from wp_auth import (
+    BASIC,
+    DIGEST,
+    NONE,
+    AuthorizationHandler,
+    Credentials,
+    answer_for,
+    basic_authorization,
+    credentials,
+    detect_scheme,
+    digest_answer,
+)
 from wp_content import (
     MAX_BODY_BYTES,
     BodyDecoder,
@@ -26,7 +38,7 @@ from wp_content import (
     truncate_body,
 )
 from wp_context import CheckContext
-from wp_deadline import Deadline
+from wp_deadline import Deadline, Phases
 from wp_http import (
     DeadlineHTTPHandler,
     DeadlineHTTPSHandler,
@@ -157,6 +169,8 @@ def _read_body(
 @dataclass(frozen=True)
 class _Response:
     status: int
+    url: str
+    """The URL of the request that got this response, after redirects."""
     headers: Message
     body: BodyDecoder | None
     """None if the body did not arrive in time."""
@@ -176,13 +190,13 @@ def _fetch(
         with response:
             encoding = header_value(response.headers, "Content-Encoding")
             body = _read_body(response, encoding, deadline, sockets)
-            return _Response(response.status, response.headers, body)
+            return _Response(response.status, response.url, response.headers, body)
     except urllib.error.HTTPError as exc:
         with exc:
             encoding = header_value(exc.headers, "Content-Encoding")
             # HTTPError hands attribute access on to the response it wraps.
             body = _read_body(cast(_Body, exc), encoding, deadline, sockets)
-            return _Response(exc.code, exc.headers, body)
+            return _Response(exc.code, exc.url, exc.headers, body)
 
 
 def _is_timeout(reason: object) -> bool:
@@ -206,27 +220,96 @@ def _describe(exc: BaseException) -> str:
     return text[:MAX_ERROR_LENGTH]
 
 
+class _MakeOpener(Protocol):
+    def __call__(
+        self, sockets: DeadlineSockets, *handlers: urllib.request.BaseHandler
+    ) -> urllib.request.OpenerDirector: ...
+
+
+def _probe(
+    opener: _MakeOpener,
+    url: str,
+    settings: Settings,
+    max_redirects: int,
+    phases: Phases,
+) -> Message:
+    """The headers of the final response to a request without credentials, sent
+    the way the timed request will be (proxy, TLS, redirects), within its own
+    timeout. Not measured. Transport errors propagate."""
+    timeout = settings["timeout"]
+    deadline = phases.start(timeout)
+    sockets = DeadlineSockets(deadline)
+    request = urllib.request.Request(
+        url, headers=request_headers(settings["user_agent"]), method="GET"
+    )
+    redirects = LimitedRedirectHandler(max_redirects)
+    response = _fetch(opener(sockets, redirects), request, timeout, deadline, sockets)
+    return response.headers
+
+
+def _auth_handlers(
+    creds: Credentials, url: str, answer: str
+) -> tuple[urllib.request.BaseHandler, ...]:
+    """Basic credentials go with every request to the checked host; Digest is
+    answered after the first 401 (see _digest_round)."""
+    if answer != BASIC:
+        return ()
+    return (AuthorizationHandler(url, basic_authorization(creds)),)
+
+
+def _digest_round(
+    opener: urllib.request.OpenerDirector,
+    response: _Response,
+    creds: Credentials,
+    settings: Settings,
+    log: StanzaLogger,
+    deadline: Deadline,
+    sockets: DeadlineSockets,
+) -> _Response:
+    """Answer the Digest challenge of a 401 once, within the same deadline and
+    through the same opener, so the redirect limit and cookies carry on. A
+    second 401 is the result."""
+    if response.status != 401 or response.body is None:
+        return response
+    authorization = digest_answer(
+        creds, response.headers, response.url, settings["stanza"], log
+    )
+    if authorization is None:
+        return response
+    request = urllib.request.Request(
+        response.url, headers=request_headers(settings["user_agent"]), method="GET"
+    )
+    request.add_unredirected_header("Authorization", authorization)
+    return _fetch(opener, request, settings["timeout"], deadline, sockets)
+
+
 def tls_options(context: CheckContext) -> TLSOptions:
     verify = context.ssl_verify
-    return TLSOptions(verify=verify, ca_certs=context.ca_certs if verify else None)
+    certificate = context.settings["client_certificate"]
+    return TLSOptions(
+        verify=verify,
+        ca_certs=context.ca_certs if verify else None,
+        client_certificate=certificate,
+        client_certificate_key=(
+            context.settings["client_certificate_key"] if certificate else None
+        ),
+    )
 
 
-def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckResult:
-    """Run one check within deadline, by default the stanza's timeout from now.
+def check_url(context: CheckContext, phases: Phases | None = None) -> CheckResult:
+    """Run one check. Each phase gets the stanza's timeout from its own start:
+    the authentication probe (only with a user name and a stored password), then
+    the timed request.
 
-    The deadline covers connecting, every redirect, the headers and the body. Any
-    failure once the deadline has expired is a timeout."""
+    The timed request's deadline covers connecting, every redirect, the headers
+    and the body. Any failure once the deadline has expired is a timeout."""
     settings = context.settings
     slog = stanza_logger(settings["stanza"], settings["log_level"])
     max_redirects = settings["max_redirects"]
     if max_redirects is None:
         max_redirects = UNLIMITED_REDIRECTS
     timeout = settings["timeout"]
-    start = time.monotonic()
-    if deadline is None:
-        deadline = Deadline(start + timeout)
-    sockets = DeadlineSockets(deadline)
-    redirects = LimitedRedirectHandler(max_redirects)
+    check_phases = phases if phases is not None else Phases()
     tls = tls_options(context)
     env_proxies = urllib.request.getproxies_environment()
 
@@ -239,15 +322,20 @@ def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckR
             settings["configuration"],
         )
 
-    opener = urllib.request.build_opener(
-        ProxyRouteHandler(route, slog),
-        DeadlineHTTPHandler(sockets),
-        DeadlineHTTPSHandler(sockets, lambda: CONTEXTS.get(tls, slog)),
-        redirects,
-        # A new jar per check: a cookie set during one check's redirects is sent
-        # on its later hops, never by another check or stanza.
-        urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
-    )
+    def opener(
+        sockets: DeadlineSockets, *handlers: urllib.request.BaseHandler
+    ) -> urllib.request.OpenerDirector:
+        return urllib.request.build_opener(
+            ProxyRouteHandler(route, slog),
+            DeadlineHTTPHandler(sockets),
+            DeadlineHTTPSHandler(sockets, lambda: CONTEXTS.get(tls, slog)),
+            # A new jar per opener: a cookie set during one check's redirects is
+            # sent on its later hops, never by the probe, another check or stanza.
+            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
+            *handlers,
+        )
+
+    start = time.monotonic()
 
     def result(
         code: int | None,
@@ -275,12 +363,33 @@ def check_url(context: CheckContext, deadline: Deadline | None = None) -> CheckR
         )
 
     try:
-        request = urllib.request.Request(
-            prepare_url(settings["url"]),
-            headers=request_headers(settings["user_agent"]),
-            method="GET",
+        url = prepare_url(settings["url"])
+    except HostNameError as exc:
+        return result(None, error=_describe(exc))
+    auth: tuple[urllib.request.BaseHandler, ...] = ()
+    creds = credentials(settings["username"], context.password)
+    answer = NONE
+    if creds is not None:
+        scheme = detect_scheme(
+            lambda: _probe(opener, url, settings, max_redirects, check_phases), slog
         )
-        response = _fetch(opener, request, timeout, deadline, sockets)
+        answer = answer_for(scheme, settings["stanza"], slog)
+
+    deadline = check_phases.start(timeout)
+    start = time.monotonic()
+    sockets = DeadlineSockets(deadline)
+    redirects = LimitedRedirectHandler(max_redirects)
+    try:
+        request = urllib.request.Request(
+            url, headers=request_headers(settings["user_agent"]), method="GET"
+        )
+        auth = _auth_handlers(creds, url, answer) if creds is not None else ()
+        timed = opener(sockets, redirects, *auth)
+        response = _fetch(timed, request, timeout, deadline, sockets)
+        if creds is not None and answer == DIGEST:
+            response = _digest_round(
+                timed, response, creds, settings, slog, deadline, sockets
+            )
     except (TLSSetupError, UnsupportedProxyError) as exc:
         # Raised before the connection of a request opens: nothing was sent.
         return result(None, error=str(exc)[:MAX_ERROR_LENGTH])

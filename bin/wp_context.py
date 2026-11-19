@@ -79,6 +79,7 @@ class ConfigContexts:
         self._cache: ConfigCache = cache
         self._snapshot: Snapshot | None = None
         self._warned_unknown: set[str] = set()
+        self._warned_no_password: set[str] = set()
         self._warned_proxy: set[tuple[str, str]] = set()
         """(stanza, warning) pairs already logged."""
         self._logged: dict[tuple[str, str], int] = {}
@@ -122,6 +123,17 @@ class ConfigContexts:
         found = password is not None
         if found and self._first("password", stanza, snapshot.generation):
             log.debug("password found for stanza")
+        if (
+            not found
+            and settings["username"] is not None
+            and stanza not in self._warned_no_password
+        ):
+            self._warned_no_password.add(stanza)
+            log.warning(
+                "username is set, but storage/passwords has no password with realm %s;"
+                " requests are sent without credentials",
+                stanza,
+            )
         proxy_password = snapshot.passwords.proxy_password()
         for warning in proxy_warnings(configuration.proxy, proxy_password):
             if (stanza, warning) not in self._warned_proxy:

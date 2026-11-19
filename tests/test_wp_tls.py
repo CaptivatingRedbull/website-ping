@@ -13,10 +13,12 @@ import warnings
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import cast
 
 import logger
 import ping_check
 import pytest
+import wp_tls
 from compat import override
 from ping_check import check_url
 from ping_config import build_settings
@@ -27,7 +29,9 @@ from wp_tls import (
     ContextCache,
     TLSOptions,
     TLSSetupError,
+    build_context,
     find_ca_bundle,
+    load_client_certificate,
     require_tls12,
     unverified_context,
     verifying_context,
@@ -473,3 +477,227 @@ def test_protocol_options_without_minimum_version(
 def test_tls12_is_accepted(servers: dict[str, TLSServer]) -> None:
     r = check_url(make(servers["valid"].url))
     assert r.response_code == 200
+
+
+# ---- client certificates --------------------------------------------------------
+
+
+class ClientNameHandler(BaseHTTPRequestHandler):
+    """Answers with the common name of the client certificate."""
+
+    def do_GET(self) -> None:
+        connection = cast(ssl.SSLSocket, self.connection)
+        peer = connection.getpeercert() or {}
+        subject = cast(
+            "tuple[tuple[tuple[str, str], ...], ...]", peer.get("subject", ())
+        )
+        names = [value for rdn in subject for key, value in rdn if key == "commonName"]
+        body = ("client=" + ",".join(names)).encode()
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        _ = self.wfile.write(body)
+
+    @override
+    def log_message(self, format: str, *args: object) -> None:
+        pass
+
+
+@pytest.fixture(scope="module")
+def mtls(pki: certs.Certificates) -> Iterator[TLSServer]:
+    """Requires a client certificate issued by the test CA, as the target's
+    mTLS port does."""
+    context = server_context(pki.folder / "valid.pem", pki.folder / "valid.key")
+    context.verify_mode = ssl.CERT_REQUIRED
+    context.load_verify_locations(str(pki.ca))
+    server = TLSServer(context)
+    server.RequestHandlerClass = ClientNameHandler
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield server
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture(scope="module")
+def bad_keys(pki: certs.Certificates) -> Path:
+    """other.key (an unrelated key), encrypted.key (passphrase "secret") and
+    garbage.pem (no PEM at all)."""
+    folder = pki.folder
+    _openssl(folder, "genrsa", "-out", "other.key", "2048")
+    _openssl(
+        folder, "genrsa", "-aes256", "-passout", "pass:secret",
+        "-out", "encrypted.key", "2048",
+    )  # fmt: skip
+    (folder / "garbage.pem").write_text("not a certificate\n")
+    return folder
+
+
+CLIENT = f"client={certs.CLIENT_CN}"
+
+
+@pytest.mark.parametrize(
+    "files",
+    [("client-combined.pem",), ("client.pem", "client.key")],
+    ids=["combined", "split"],
+)
+@pytest.mark.parametrize("verify", ["0", "1"])
+def test_client_certificate_is_sent(
+    pki: certs.Certificates, mtls: TLSServer, files: tuple[str, ...], verify: str
+) -> None:
+    key = str(pki.folder / files[1]) if len(files) == 2 else ""
+    r = check_url(
+        make(
+            mtls.url,
+            ssl_verify=verify,
+            ca_certs=str(pki.ca),
+            should_contain_string=CLIENT,
+            client_certificate=str(pki.folder / files[0]),
+            client_certificate_key=key,
+        )
+    )
+    assert r.response_code == 200 and r.has_expected_string is True
+
+
+def test_without_client_certificate_the_handshake_fails(mtls: TLSServer) -> None:
+    """With TLS 1.3 the server checks for the certificate after the client has
+    finished its handshake; the client then sees the server's alert or the closed
+    connection, whichever arrives first."""
+    r = check_url(make(mtls.url))
+    assert r.response_code is None and not r.timed_out
+    assert r.error.startswith(("SSLError: ", "ConnectionResetError: ")), r.error
+
+
+def test_key_without_certificate_has_no_effect(
+    pki: certs.Certificates, mtls: TLSServer
+) -> None:
+    settings, warnings = build_settings(
+        "web_ping://tls",
+        {"url": mtls.url, "interval": "60",
+         "client_certificate_key": str(pki.folder / "client.key")},
+    )  # fmt: skip
+    assert warnings == [
+        "client_certificate_key has no effect without client_certificate"
+    ]
+    assert ping_check.tls_options(make_context(settings)) == TLSOptions(verify=False)
+
+
+@pytest.mark.parametrize(
+    ("cert", "key", "error"),
+    [
+        ("nonexistent.pem", None, "not readable: {dir}/nonexistent.pem"),
+        (".", None, "not readable: {dir}"),  # the folder itself
+        ("client.pem", "nonexistent.key", "key not readable: {dir}/nonexistent.key"),
+        (
+            "client.pem",
+            "encrypted.key",
+            "encrypted keys are not supported: {dir}/encrypted.key",
+        ),
+        (
+            "client.pem",
+            "other.key",
+            "key does not match the certificate: {dir}/client.pem",
+        ),
+        ("garbage.pem", "client.key", "no certificate in {dir}/garbage.pem"),
+        ("client.key", None, "no certificate in {dir}/client.key"),
+        (
+            "client.pem",
+            None,
+            "no private key in {dir}/client.pem, set client_certificate_key",
+        ),
+        ("client.pem", "garbage.pem", "no private key in {dir}/garbage.pem"),
+    ],
+)
+def test_client_certificate_errors(
+    bad_keys: Path, cert: str, key: str | None, error: str
+) -> None:
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    keyfile = None if key is None else str(bad_keys / key)
+    with pytest.raises(TLSSetupError) as caught:
+        load_client_certificate(context, str(bad_keys / cert), keyfile)
+    message = str(caught.value)
+    assert message == "client certificate: " + error.format(dir=bad_keys)
+    for name in ("client.key", "other.key", "encrypted.key"):
+        body = (bad_keys / name).read_text().splitlines()[1]
+        assert body not in message, "never key material"
+
+
+def test_setup_error_sends_nothing_and_is_logged_once(
+    bad_keys: Path, mtls: TLSServer, records: list[logging.LogRecord]
+) -> None:
+    before = mtls.connections
+    cert = str(bad_keys / "client.pem")
+    results = [
+        check_url(
+            make(
+                mtls.url,
+                client_certificate=cert,
+                client_certificate_key=str(bad_keys / "other.key"),
+            )
+        )
+        for _ in "ab"
+    ]
+    expected = f"client certificate: key does not match the certificate: {cert}"
+    assert [(r.response_code, r.error, r.timed_out) for r in results] == [
+        (None, expected, False)
+    ] * 2
+    assert mtls.connections == before, "no request without the certificate"
+    errors = [r.getMessage() for r in records if r.levelno == logging.ERROR]
+    assert errors == [f"TLS setup failed: {expected}"]
+
+
+def test_client_certificate_only_matters_for_https(tmp_path: Path) -> None:
+    class Plain(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(204)
+            self.end_headers()
+
+        @override
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Plain)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        r = check_url(
+            make(
+                f"http://127.0.0.1:{httpd.server_address[1]}/",
+                client_certificate=str(tmp_path / "missing.pem"),
+            )
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert r.response_code == 204 and r.error == ""
+
+
+def test_client_certificate_is_loaded_once_per_process(
+    pki: certs.Certificates, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+    real = load_client_certificate
+
+    def counting(context: ssl.SSLContext, certfile: str, keyfile: str | None) -> None:
+        calls.append(certfile)
+        real(context, certfile, keyfile)
+
+    monkeypatch.setattr(wp_tls, "load_client_certificate", counting)
+    cache = ContextCache({}, [])
+    log = logger.stanza_logger("web_ping://tls")
+    options = TLSOptions(
+        verify=False, client_certificate=str(pki.folder / "client-combined.pem")
+    )
+    assert cache.get(options, log) is cache.get(options, log)
+    assert calls == [str(pki.folder / "client-combined.pem")]
+
+
+def test_build_context_with_verification_and_client_certificate(
+    pki: certs.Certificates,
+) -> None:
+    options = TLSOptions(
+        verify=True,
+        ca_certs=str(pki.ca),
+        client_certificate=str(pki.folder / "client.pem"),
+        client_certificate_key=str(pki.folder / "client.key"),
+    )
+    context = build_context(options, logger.stanza_logger("web_ping://tls"))
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname

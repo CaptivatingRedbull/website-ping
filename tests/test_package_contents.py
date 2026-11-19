@@ -18,6 +18,7 @@ EXPECTED_FILES = {
     "bin/ping_config.py",
     "bin/ping_events.py",
     "bin/web_ping.py",
+    "bin/wp_auth.py",
     "bin/wp_content.py",
     "bin/wp_context.py",
     "bin/wp_deadline.py",

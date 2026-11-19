@@ -255,4 +255,8 @@ def build_settings(
         "host": _optional_text(params, "host"),
         "sourcetype": _text(params, "sourcetype") or DEFAULT_SOURCETYPE,
     }
+    if settings["client_certificate_key"] and not settings["client_certificate"]:
+        warnings.append(
+            "client_certificate_key has no effect without client_certificate"
+        )
     return settings, warnings

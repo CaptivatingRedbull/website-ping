@@ -550,7 +550,7 @@ def setup_parity(stack: Stack, manager: StackManager) -> None:
     # admin of Website Monitoring would have them.
     rest = stack.rest("so1")
     for realm, username, password in parity.passwords(
-        configured, stored_proxy_password=True
+        configured, stored_passwords=True
     ):
         _ = rest.post(
             "/servicesNS/nobody/search/storage/passwords",
@@ -560,9 +560,11 @@ def setup_parity(stack: Stack, manager: StackManager) -> None:
         APPS_DIR / "parity",
         manager.workdir / f"website_ping_inputs-parity-{stack.runtime.id}.tar.gz",
         extra={
-            "default/inputs.conf": parity.inputs_conf(configured),
+            "default/inputs.conf": parity.inputs_conf(
+                configured, stored_passwords=True
+            ),
             "default/website_monitoring.conf": parity.website_monitoring_conf(
-                configured, stored_proxy_password=True
+                configured, stored_passwords=True
             ),
             **install.python_override(stack.runtime),
         },

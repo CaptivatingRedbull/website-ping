@@ -30,6 +30,8 @@ SILENT_PORT = 8081
 CONTENT_STRING = "Grüße"
 MARKER = "WPTEST-MARKER"
 EMBEDDED_DATE = "2020-01-02T03:04:05"
+WRONG_PASSWORD = "wptest-wrong-password"
+"""Distinct from every other string in the logs, so a scan can find it."""
 
 Password = tuple[str, str, str]
 """(realm, username, password) of a storage/passwords entry."""
@@ -147,9 +149,8 @@ PARITY_SCENARIOS: tuple[ParityScenario, ...] = (
                    password=("web_ping://basic-secure", AUTH_USER, AUTH_PASSWORD)),
     ParityScenario("digest-plain", f"{T}/auth/digest/digest-plain", AUTH),
     ParityScenario("auth-wrong", f"{T}/auth/basic/auth-wrong",
-                   _s(username=AUTH_USER, password="wrong")),
-    ParityScenario("ntlm-offered", f"{T}/auth/ntlm/ntlm-offered", AUTH,
-                   notes="NTLM not supported in website-ping"),
+                   _s(username=AUTH_USER, password=WRONG_PASSWORD)),
+    ParityScenario("ntlm-offered", f"{T}/auth/ntlm/ntlm-offered", AUTH),
     ParityScenario("mtls-combined", f"https://target:{MTLS_PORT}/mtls-combined",
                    _s(client_certificate=f"{CERTS}/client-combined.pem")),
     ParityScenario("mtls-split", f"https://target:{MTLS_PORT}/mtls-split",
@@ -206,26 +207,21 @@ CONF_STANZAS: Mapping[str, Mapping[str, str]] = MappingProxyType(
         ),
     }
 )
-_AUTH = "needs HTTP authentication with passwords from storage/passwords"
-
-PENDING: Mapping[str, str] = MappingProxyType(
-    {
-        **dict.fromkeys(
-            (
-                "basic-plain",
-                "basic-secure",
-                "digest-plain",
-                "auth-wrong",
-                "ntlm-offered",
-            ),
-            _AUTH,
-        ),
-        **dict.fromkeys(("mtls-combined", "mtls-split"), "needs client certificates"),
-    }
-)
+PENDING: Mapping[str, str] = MappingProxyType({})
 """Scenarios website-ping cannot match yet, with the missing feature. They are
 skipped by the parity test and left out of its config app."""
 
+INTENDED: Mapping[str, str] = MappingProxyType(
+    {
+        "ntlm-offered": (
+            "NTLM is not supported: website-ping reports the site's 401,"
+            " Website Monitoring 2.9.7 wrote no event"
+        ),
+    }
+)
+"""Scenarios where website-ping differs from 2.9.7 on purpose in a way the event
+comparison cannot express (an event where 2.9.7 wrote none). They run in the
+parity stack and are checked by their own tests."""
 
 REFUSED: Mapping[str, str] = MappingProxyType(
     {
@@ -241,9 +237,16 @@ REQUESTS_COMPARED: tuple[str, ...] = (
     "idn-host",
     "path-unicode",
     "path-space",
+    "basic-plain",
+    "basic-secure",
+    "digest-plain",
+    "auth-wrong",
+    "mtls-combined",
+    "mtls-split",
 )
 """Compared scenarios whose target request log is compared with the fixture too:
-header names, order and values, cookies, Host and the request line."""
+header names, order and values, cookies, Host, the request line, the
+authentication scheme and the client certificate of each request."""
 
 
 PROXIES_COMPARED: tuple[str, ...] = (
@@ -264,15 +267,31 @@ def compared_scenarios(
 ) -> tuple[ParityScenario, ...]:
     """The scenarios the parity test compares with their fixtures."""
     return tuple(
-        s for s in scenarios if s.title not in PENDING and s.title not in REFUSED
+        s
+        for s in scenarios
+        if s.title not in PENDING and s.title not in REFUSED and s.title not in INTENDED
     )
 
 
 def configured_scenarios(
     scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
 ) -> tuple[ParityScenario, ...]:
-    """The scenarios in the parity config app: the compared and the refused ones."""
+    """The scenarios in the parity config app: the compared, the refused and the
+    intended ones."""
     return tuple(s for s in scenarios if s.title not in PENDING)
+
+
+def credential_scenarios(
+    scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
+) -> tuple[ParityScenario, ...]:
+    """The scenarios whose checks send a password: a user name, or a proxy
+    configuration with a proxy user."""
+    return tuple(
+        s
+        for s in scenarios
+        if "username" in s.settings
+        or (s.conf is not None and "proxy_user" in CONF_STANZAS[s.conf])
+    )
 
 
 INPUTS_HEADER = (
@@ -287,13 +306,30 @@ def _stanza_text(name: str, values: Mapping[str, str]) -> str:
     return f"[{name}]\n" + "".join(f"{k} = {v}\n" for k, v in values.items())
 
 
-def inputs_conf(scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS) -> str:
-    """local/inputs.conf for the given scenarios."""
+def inputs_conf(
+    scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
+    *,
+    stored_passwords: bool = False,
+) -> str:
+    """local/inputs.conf for the given scenarios.
+
+    With stored_passwords, password is left out of every stanza: website-ping
+    refuses a plain one, so the parity stack stores it (passwords) instead."""
     titles = [scenario.title for scenario in scenarios]
     duplicates = sorted({title for title in titles if titles.count(title) > 1})
     if duplicates:
         raise ValueError(f"duplicate titles: {duplicates}")
-    stanzas = [_stanza_text(f"web_ping://{s.title}", s.stanza()) for s in scenarios]
+    stanzas = [
+        _stanza_text(
+            f"web_ping://{s.title}",
+            {
+                key: value
+                for key, value in s.stanza().items()
+                if not (stored_passwords and key == "password")
+            },
+        )
+        for s in scenarios
+    ]
     return INPUTS_HEADER + "\n" + "\n".join(stanzas)
 
 
@@ -308,12 +344,12 @@ def _conf_names(scenarios: Sequence[ParityScenario]) -> list[str]:
 def website_monitoring_conf(
     scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
     *,
-    stored_proxy_password: bool = False,
+    stored_passwords: bool = False,
 ) -> str:
     """website_monitoring.conf: [default] plus every stanza a scenario names.
 
-    With stored_proxy_password, proxy_password is left out: website-ping refuses
-    a plain one, so the parity stack stores it (passwords) instead.
+    With stored_passwords, proxy_password is left out: website-ping refuses a
+    plain one, so the parity stack stores it (passwords) instead.
     """
     stanzas = [
         _stanza_text(
@@ -321,7 +357,7 @@ def website_monitoring_conf(
             {
                 key: value
                 for key, value in CONF_STANZAS[name].items()
-                if not (stored_proxy_password and key == "proxy_password")
+                if not (stored_passwords and key == "proxy_password")
             },
         )
         for name in _conf_names(scenarios)
@@ -332,12 +368,19 @@ def website_monitoring_conf(
 def passwords(
     scenarios: Sequence[ParityScenario] = PARITY_SCENARIOS,
     *,
-    stored_proxy_password: bool = False,
+    stored_passwords: bool = False,
 ) -> list[Password]:
-    """The storage/passwords entries the scenarios need. With
-    stored_proxy_password, also the proxy password of the stanzas they name."""
-    entries = [s.password for s in scenarios if s.password is not None]
-    if stored_proxy_password:
+    """The storage/passwords entries the scenarios need. With stored_passwords
+    also every password the generated .conf files then leave out: the inputs'
+    (realm web_ping://<title>) and the proxy password of the stanzas they name."""
+    entries: list[Password] = []
+    for s in scenarios:
+        plain = s.settings.get("password")
+        if s.password is not None:
+            entries.append(s.password)
+        elif stored_passwords and plain is not None:
+            entries.append((f"web_ping://{s.title}", s.settings["username"], plain))
+    if stored_passwords:
         proxy_passwords = sorted(
             {
                 CONF_STANZAS[name]["proxy_password"]

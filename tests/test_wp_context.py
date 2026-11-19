@@ -224,6 +224,28 @@ def test_password_found_is_logged_once_per_load(log_file: Path) -> None:
     assert PASSWORD not in text and PROXY_PASSWORD not in text
 
 
+def test_username_without_stored_password_warns_once(log_file: Path) -> None:
+    clock = Clock()
+    contexts = make_contexts(Splunkd(), clock)
+    for _ in range(2):
+        assert contexts.ready()
+        for name in ("b", "c", "a"):
+            context = contexts.context(
+                settings(name, username="u"), StanzaLogger(f"web_ping://{name}")
+            )
+            assert context is not None
+        clock.now += 600
+    warnings = [line for line in lines(log_file) if "has no password" in line]
+    assert [line.split(" stanza=")[1].split(" ")[0] for line in warnings] == [
+        "web_ping://b",
+        "web_ping://c",
+    ]
+    assert warnings[0].endswith(
+        "username is set, but storage/passwords has no password with realm"
+        " web_ping://b; requests are sent without credentials"
+    )
+
+
 def test_a_refresh_failure_keeps_the_contexts() -> None:
     clock = Clock()
     splunkd = Splunkd()

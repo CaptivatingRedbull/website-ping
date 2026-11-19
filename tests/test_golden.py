@@ -214,7 +214,6 @@ def test_allowed_fields_merge_global_and_title() -> None:
         "header_Keep-Alive",
         "header_Keep_Alive",
     }
-    assert golden.ANY_FIELD in golden.allowed_fields("ntlm-offered")
     assert {"_time", "timestamp"} <= set(golden.allowed_fields("date-in-title"))
     assert set(golden.allowed_fields("content-binary")) >= {
         "content_md5",

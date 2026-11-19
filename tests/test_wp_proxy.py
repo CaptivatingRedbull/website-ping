@@ -23,7 +23,7 @@ from compat import override
 from ping_check import NO_PROXY, ProxyInfo, check_url
 from ping_config import build_settings
 from wp_context import CheckContext, make_context
-from wp_deadline import Deadline
+from wp_deadline import Phases
 from wp_proxy import (
     DIRECT_ROUTE,
     ProxyEndpoint,
@@ -568,11 +568,11 @@ def test_expiry_ends_a_stalled_tunnel(
     TLS handshake waits: only the expiry (the runner's tick) can end the check
     before the 30 s socket timeout."""
     proxy = open_proxy(proxies, stall=stall)
-    deadline = Deadline(time.monotonic() + 30)
-    timer = threading.Timer(0.5, deadline.expire)
+    phases = Phases()
+    timer = threading.Timer(0.5, phases.stop)
     timer.start()
     try:
-        r = check_url(make(tls_targets["valid"].url("/"), proxy.conf()), deadline)
+        r = check_url(make(tls_targets["valid"].url("/"), proxy.conf()), phases)
     finally:
         timer.join()
     assert r.timed_out and r.response_code is None and r.error == ""
@@ -585,12 +585,12 @@ def test_expiry_ends_a_stalled_direct_handshake() -> None:
     threading.Thread(
         target=lambda: accepted.append(listener.accept()[0]), daemon=True
     ).start()
-    deadline = Deadline(time.monotonic() + 30)
-    timer = threading.Timer(0.5, deadline.expire)
+    phases = Phases()
+    timer = threading.Timer(0.5, phases.stop)
     timer.start()
     try:
         port = listener.getsockname()[1]
-        r = check_url(make(f"https://127.0.0.1:{port}/"), deadline)
+        r = check_url(make(f"https://127.0.0.1:{port}/"), phases)
     finally:
         timer.join()
         for conn in accepted:
@@ -613,13 +613,11 @@ def test_expiry_ends_a_trickle_through_the_tunnel(
     tls_targets: dict[str, Target], proxies: list[LocalProxy]
 ) -> None:
     proxy = open_proxy(proxies)
-    deadline = Deadline(time.monotonic() + 30)
-    timer = threading.Timer(1.0, deadline.expire)
+    phases = Phases()
+    timer = threading.Timer(1.0, phases.stop)
     timer.start()
     try:
-        r = check_url(
-            make(tls_targets["valid"].url("/trickle"), proxy.conf()), deadline
-        )
+        r = check_url(make(tls_targets["valid"].url("/trickle"), proxy.conf()), phases)
     finally:
         timer.join()
     assert r.timed_out and r.response_code is None and r.error == ""

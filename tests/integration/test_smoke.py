@@ -44,9 +44,13 @@ INVALID_STANZAS = {
         "website_monitoring.conf stanza socks cannot be used, not run:"
         " proxy_type = socks5 is not supported, only HTTP proxies are"
     ),
+    "password-plain-rejected": (
+        "password in inputs.conf is not supported; store it in storage/passwords"
+        " with realm web_ping://password-plain-rejected"
+    ),
 }
 SETUP_ERROR_STANZAS = {
-    "tls-bad-ca-path": "certificates cannot be verified: ca_certs not readable",
+    "tls-bad-ca-path": "TLS setup failed: ca_certs not readable",
 }
 """Stanzas that run, but log one ERROR line per process about their settings."""
 
@@ -207,6 +211,27 @@ def test_invalid_stanza_logs_error_and_writes_no_event(
         f" _index_earliest={int(standalone.mark)}"
     )
     assert events == []
+
+
+def test_plain_password_is_never_logged(standalone: Stack) -> None:
+    name = "password-plain-rejected"
+    secret = standalone_stanzas()[name]["password"]
+    searcher = standalone.searcher("so1")
+    _ = wait_for(
+        f"{name} ERROR line",
+        lambda: (
+            searcher.search(
+                errors_query(standalone.mark, f'"stanza=web_ping://{name}"')
+            )
+            or None
+        ),
+        EVENT_TIMEOUT,
+        standalone.stages,
+    )
+    leaked = searcher.search(
+        f'search index=_internal "{secret}" _index_earliest={int(standalone.mark)}'
+    )
+    assert leaked == [], leaked
 
 
 def test_one_process_runs_every_valid_stanza(standalone: Stack) -> None:

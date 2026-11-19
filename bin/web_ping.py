@@ -12,7 +12,7 @@ from ping_check import CheckResult, check_url
 from ping_config import ConfigError, Settings, build_settings
 from ping_events import write_event
 from wp_context import CheckContext, ConfigContexts
-from wp_deadline import Deadline
+from wp_deadline import Phases
 from wp_event_fields import check_events
 from wp_runner import STOP_WAIT, Checkpoints, Runner, read_input_config
 from wp_splunk import DEFAULT_THREAD_LIMIT, ConfigCache, RestClient, SplunkdClient
@@ -103,11 +103,11 @@ def load_settings(
     return valid, invalid
 
 
-def run_check(context: CheckContext, deadline: Deadline) -> CheckResult:
+def run_check(context: CheckContext, phases: Phases) -> CheckResult:
     settings = context.settings
     slog = stanza_logger(settings["stanza"], settings["log_level"])
     slog.info("starting check url=%s", settings["url"])
-    result = check_url(context, deadline)
+    result = check_url(context, phases)
     slog.info(
         "check done code=%s time=%.3f timed_out=%s",
         result.response_code,

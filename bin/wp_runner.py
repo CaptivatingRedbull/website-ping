@@ -28,7 +28,7 @@ from logger import StanzaLogger, process_log, stanza_logger
 from ping_check import CheckResult
 from ping_config import Settings
 from wp_context import BuiltinContexts, CheckContext
-from wp_deadline import Deadline
+from wp_deadline import Phases
 from wp_splunk import DEFAULT_THREAD_LIMIT
 
 TICK = 1.0
@@ -168,7 +168,7 @@ class Contexts(Protocol):
         ...
 
 
-Check = Callable[[CheckContext, Deadline], CheckResult]
+Check = Callable[[CheckContext, Phases], CheckResult]
 Render = Callable[[Settings, CheckResult], str]
 Write = Callable[[str], None]
 
@@ -222,7 +222,7 @@ class Runner:
         self._stop: threading.Event = threading.Event()
         self._stop_reason: str = ""
         self._signal: int | None = None
-        self._deadlines: dict[str, Deadline] = {}
+        self._deadlines: dict[str, Phases] = {}
         self._queued: int = 0
         self._running: int = 0
         self._late: int = 0
@@ -345,10 +345,12 @@ class Runner:
 
     def _expire_deadlines(self, *, only_overdue: bool) -> None:
         with self._lock:
-            deadlines = list(self._deadlines.values())
-        for deadline in deadlines:
-            if not deadline.expired and (not only_overdue or deadline.passed()):
-                deadline.expire()
+            checks = list(self._deadlines.values())
+        for phases in checks:
+            if only_overdue:
+                phases.expire_overdue()
+            else:
+                phases.stop()
 
     # ---- one check (worker thread) -------------------------------------------
 
@@ -365,7 +367,7 @@ class Runner:
                 entry.log.warning("check started %d s late", round(waited))
                 with self._lock:
                     self._late += 1
-            self._run_check(entry, context, started)
+            self._run_check(entry, context)
         except Exception:  # a worker must never die silently
             entry.log.exception("check could not run")
         finally:
@@ -374,15 +376,15 @@ class Runner:
                 entry.busy = False
                 self._idle.notify_all()
 
-    def _run_check(self, entry: _Stanza, context: CheckContext, started: float) -> None:
+    def _run_check(self, entry: _Stanza, context: CheckContext) -> None:
         settings = entry.settings
         stanza = settings["stanza"]
         last_ran = entry.last_run
-        deadline = Deadline(started + settings["timeout"], self._monotonic)
+        phases = Phases(self._monotonic)
         with self._lock:
-            self._deadlines[stanza] = deadline
+            self._deadlines[stanza] = phases
         try:
-            result: CheckResult | None = self._check(context, deadline)
+            result: CheckResult | None = self._check(context, phases)
         except Exception:  # checkpoint anyway, so it does not loop
             entry.log.exception("check failed unexpectedly, no event written")
             result = None

@@ -1,4 +1,4 @@
-"""The time budget of one check."""
+"""The time budget of one check: one deadline per phase."""
 
 from __future__ import annotations
 
@@ -69,3 +69,49 @@ def _call(callback: Callable[[], None]) -> None:
         callback()
     except Exception:  # noqa: BLE001 - one failing callback must not stop the others
         process_log.exception("deadline callback failed")
+
+
+class Phases:
+    """The deadlines of one check, one phase after the other.
+
+    A check that has to ask the site for its authentication scheme first runs that
+    request with its own timeout before the timed request gets a fresh one, as
+    Website Monitoring did. The runner's tick expires the current phase when its
+    time is up; stop() expires the current phase and every later one at once.
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock: Callable[[], float] = clock
+        self._lock: threading.Lock = threading.Lock()
+        self._current: Deadline | None = None
+        self._stopped: bool = False
+
+    @property
+    def current(self) -> Deadline | None:
+        """The deadline of the phase that runs now; None before the first."""
+        return self._current
+
+    def start(self, seconds: float) -> Deadline:
+        """Begin the next phase, ending seconds from now. Already expired if the
+        check has been stopped."""
+        deadline = Deadline.after(seconds, self._clock)
+        with self._lock:
+            self._current = deadline
+            stopped = self._stopped
+        if stopped:
+            deadline.expire()
+        return deadline
+
+    def expire_overdue(self) -> None:
+        """Expire the current phase if its time is up."""
+        current = self._current
+        if current is not None and not current.expired and current.passed():
+            current.expire()
+
+    def stop(self) -> None:
+        """Expire the current phase and make every later one start expired."""
+        with self._lock:
+            self._stopped = True
+            current = self._current
+        if current is not None:
+            current.expire()

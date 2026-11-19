@@ -18,7 +18,7 @@ from logger import log_to_stderr, setup_logging
 from ping_check import CheckResult
 from ping_config import build_settings
 from wp_context import CheckContext, make_context
-from wp_deadline import Deadline
+from wp_deadline import Phases
 from wp_runner import STOP_WAIT
 from wp_splunk import CONF_PATH
 
@@ -170,20 +170,20 @@ def test_main_scheme_does_not_open_the_log(
 def test_run_check_logs_start_and_result(
     log_file: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    seen: list[Deadline] = []
+    seen: list[Phases] = []
 
-    def fake(context: CheckContext, deadline: Deadline | None = None) -> CheckResult:
-        assert deadline is not None
-        seen.append(deadline)
+    def fake(context: CheckContext, phases: Phases | None = None) -> CheckResult:
+        assert phases is not None
+        seen.append(phases)
         return CheckResult(None, elapsed=0.25, finished=1.0, error="RefusedError: no")
 
     monkeypatch.setattr(web_ping, "check_url", fake)
     settings, _ = build_settings(
         "web_ping://t", {"url": "http://example.invalid/", "interval": "60"}
     )
-    deadline = Deadline.after(5)
-    result = web_ping.run_check(make_context(settings), deadline)
-    assert result.error == "RefusedError: no" and seen == [deadline]
+    phases = Phases()
+    result = web_ping.run_check(make_context(settings), phases)
+    assert result.error == "RefusedError: no" and seen == [phases]
     lines = log_file.read_text(encoding="utf-8").splitlines()
     assert " INFO stanza=web_ping://t v=" in lines[0]
     assert lines[0].endswith(" starting check url=http://example.invalid/")

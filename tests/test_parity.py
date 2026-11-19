@@ -10,7 +10,6 @@ from ping_config import ConfigError, build_settings
 from target import server
 from wptest import parity
 from wptest.parity import PARITY_SCENARIOS, ParityScenario
-from wptest.preflight import ALLOWED_STANZA_HOSTS
 from wptest.stack import PROXY_PASSWORD, PROXY_USER
 
 
@@ -68,36 +67,49 @@ def test_website_monitoring_conf_has_default_and_named_stanzas() -> None:
 
 def test_website_ping_conf_stores_the_proxy_password_instead() -> None:
     configured = parity.configured_scenarios()
-    parser = parse(
-        parity.website_monitoring_conf(configured, stored_proxy_password=True)
-    )
+    parser = parse(parity.website_monitoring_conf(configured, stored_passwords=True))
     assert parser.sections() == ["default", "auth", "ignore", "plain"]
     assert "proxy_password" not in parser["auth"]
     assert parser["auth"]["proxy_user"] == PROXY_USER
-    assert parity.passwords(configured, stored_proxy_password=True) == [
-        ("website_monitoring_app_proxy", "IN_CONF_FILE", PROXY_PASSWORD)
-    ]
     assert parse(parity.website_monitoring_conf())["auth"]["proxy_password"] == (
         PROXY_PASSWORD
     )
-    assert parity.passwords(configured) == []
 
 
-def test_compared_proxy_logs_belong_to_compared_proxy_scenarios() -> None:
-    compared = {s.title: s for s in parity.compared_scenarios()}
-    for title in parity.PROXIES_COMPARED:
-        assert compared[title].conf is not None, title
+def test_website_ping_inputs_store_every_password_instead() -> None:
+    configured = parity.configured_scenarios()
+    parser = parse(parity.inputs_conf(configured, stored_passwords=True))
+    assert all("password" not in parser[section] for section in parser.sections())
+    assert parser["web_ping://basic-plain"]["username"] == server.AUTH_USER
+    user, secret = server.AUTH_USER, server.AUTH_PASSWORD
+    assert parity.passwords(configured, stored_passwords=True) == [
+        ("web_ping://basic-plain", user, secret),
+        ("web_ping://basic-secure", user, secret),
+        ("web_ping://digest-plain", user, secret),
+        ("web_ping://auth-wrong", user, parity.WRONG_PASSWORD),
+        ("web_ping://ntlm-offered", user, secret),
+        ("website_monitoring_app_proxy", "IN_CONF_FILE", PROXY_PASSWORD),
+    ]
+    assert parity.passwords(configured) == [("web_ping://basic-secure", user, secret)]
 
 
-def test_hosts_pass_the_preflight() -> None:
-    hosts = {urlsplit(s.url).hostname for s in PARITY_SCENARIOS}
-    assert hosts <= ALLOWED_STANZA_HOSTS
+def test_credential_scenarios_send_a_password() -> None:
+    titles = [s.title for s in parity.credential_scenarios()]
+    assert titles == [
+        "basic-plain",
+        "basic-secure",
+        "digest-plain",
+        "auth-wrong",
+        "ntlm-offered",
+        "proxy-auth",
+    ]
 
 
 def test_auth_scenarios_use_the_target_credentials() -> None:
     table = parity.by_title()
     assert table["basic-plain"].settings["username"] == server.AUTH_USER
     assert table["basic-plain"].settings["password"] == server.AUTH_PASSWORD
+    assert table["auth-wrong"].settings["password"] == parity.WRONG_PASSWORD
     assert "password" not in table["basic-secure"].settings
     assert parity.passwords() == [
         ("web_ping://basic-secure", server.AUTH_USER, server.AUTH_PASSWORD)
@@ -179,23 +191,34 @@ def test_pending_names_known_scenarios_and_a_missing_feature() -> None:
         assert reason.startswith("needs "), title
 
 
-def test_compared_scenarios_leave_out_pending_and_refused_ones() -> None:
+def test_compared_scenarios_leave_out_pending_refused_and_intended_ones() -> None:
     compared = {s.title for s in parity.compared_scenarios()}
-    assert compared.isdisjoint(parity.PENDING)
-    assert compared.isdisjoint(parity.REFUSED)
-    assert set(parity.PENDING).isdisjoint(parity.REFUSED)
-    everything = compared | set(parity.PENDING) | set(parity.REFUSED)
+    pending, refused, intended = (
+        set(parity.PENDING),
+        set(parity.REFUSED),
+        set(parity.INTENDED),
+    )
+    for group in (pending, refused, intended):
+        assert compared.isdisjoint(group)
+    assert pending.isdisjoint(refused) and refused.isdisjoint(intended)
+    assert pending.isdisjoint(intended)
+    everything = compared | pending | refused | intended
     assert everything == {s.title for s in PARITY_SCENARIOS}
 
 
-def test_config_app_has_compared_and_refused_scenarios() -> None:
+def test_config_app_has_compared_refused_and_intended_scenarios() -> None:
     configured = parity.configured_scenarios()
     stanzas = parse(parity.inputs_conf(configured)).sections()
     assert stanzas == [f"web_ping://{s.title}" for s in configured]
     titles = {s.title for s in configured}
     assert titles == {s.title for s in parity.compared_scenarios()} | set(
         parity.REFUSED
-    )
+    ) | set(parity.INTENDED)
+
+
+def test_intended_differences_name_known_scenarios_and_a_reason() -> None:
+    assert set(parity.INTENDED) <= set(parity.by_title())
+    assert all(reason for reason in parity.INTENDED.values())
 
 
 def test_refused_scenarios_are_refused_by_the_settings() -> None:

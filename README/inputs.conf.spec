@@ -31,17 +31,32 @@ configuration = <string>
 * Default: default
 
 client_certificate = <string>
-* Path to a client certificate, for sites that require client certificate
-  authentication.
+* Path to a client certificate in PEM format, for sites that require client
+  certificate authentication. The file may also hold the private key.
+* Used for HTTPS only, with ssl_verify on or off. The file is read once; a
+  changed file takes effect at the next restart.
+* If the file cannot be read, the key does not match or the key is encrypted,
+  no request is sent and the event's error field starts with
+  "client certificate:".
 * Default: blank (no client certificate)
 
 client_certificate_key = <string>
-* Path to the key of the client certificate, if the key is in a separate file.
+* Path to the private key of the client certificate (PEM, not encrypted), if it
+  is not in the client_certificate file.
+* Has no effect without client_certificate.
 * Default: blank
 
 username = <string>
 * The user name for HTTP authentication.
-* The password is read from storage/passwords, realm web_ping://<name>.
+* The password is read from storage/passwords, realm web_ping://<name>. Without
+  a stored password, requests are sent without credentials.
+* Each check first sends one request without credentials to learn the
+  authentication scheme of the site. That request has its own timeout and is
+  not part of total_time.
+* Supported schemes: Basic, and Digest with the algorithms MD5, MD5-sess, SHA
+  and SHA-256 and qop auth or none. A Digest challenge is answered once. NTLM
+  and Negotiate are not supported; requests are then sent without credentials.
+  Other schemes get Basic credentials.
 * Default: blank (no authentication)
 
 password = <string>

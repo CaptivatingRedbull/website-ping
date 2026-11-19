@@ -1,16 +1,23 @@
 """website-ping's events compared with Website Monitoring 2.9.7's golden events.
 The parity stack runs the scenarios of wptest/parity.py that website-ping can
-already match; the others are skipped with the feature they still need.
+already match, refuses on purpose or differs in on purpose; the others are
+skipped with the feature they still need.
 """
 
 from __future__ import annotations
 
 import pytest
 from wptest import golden, legacy, parity
+from wptest.credentials import (
+    credential_forms,
+    find_credentials,
+    grep_script,
+    parse_grep,
+)
 from wptest.evidence import Evidence
 from wptest.install import ROOT
 from wptest.splunk_rest import Searcher
-from wptest.stack import Stack
+from wptest.stack import APP_LOG, CHECKPOINT_DIR, PROXY_USER, Stack
 from wptest.wait import INDEXED, STARTED, wait_for
 
 pytestmark = pytest.mark.parity
@@ -23,6 +30,8 @@ def _param(scenario: parity.ParityScenario) -> object:
     reason = parity.PENDING.get(scenario.title)
     if scenario.title in parity.REFUSED:
         reason = "refused by website-ping on purpose; see the refused-stanza test"
+    if scenario.title in parity.INTENDED:
+        reason = f"differs on purpose ({parity.INTENDED[scenario.title]}); see its test"
     marks = [pytest.mark.skip(reason=reason)] if reason else []
     return pytest.param(scenario, id=scenario.title, marks=marks)
 
@@ -221,3 +230,88 @@ def test_refused_stanza_logs_an_error_and_is_not_run(
     searcher = parity_stack.searcher("so1")
     assert check_rows(searcher, title, parity_stack.mark) is None
     assert parity_stack.target_requests(title) == 0
+
+
+def test_ntlm_site_gets_an_event_with_its_401(parity_stack: Stack) -> None:
+    """2.9.7 wrote no event for a site that offers NTLM. website-ping asks for the
+    scheme, then sends the request without credentials and reports the 401, with
+    one WARN per runner process (the harness restarts Splunk once after the
+    install, so only lines after the mark count)."""
+    title = "ntlm-offered"
+    scenario = parity.by_title()[title]
+    searcher = parity_stack.searcher("so1")
+    rows = wait_for(
+        INDEXED,
+        lambda: check_rows(searcher, title, parity_stack.mark),
+        EVENT_TIMEOUT,
+        parity_stack.stages,
+    )
+    fields = golden.event_from_result(rows[0]).fields
+    assert (fields.get("response_code"), fields.get("timed_out")) == ("401", "False")
+    sent = first_requests(parity_stack, scenario, 2)
+    assert sent is not None
+    assert [(r.authorization, r.status) for r in sent] == [("", 401), ("", 401)]
+    assert parity_stack.target_requests(title) <= 2 * (len(rows) + 1)
+    warnings = [
+        line
+        for logged, line in parity_stack.app_log("so1")
+        if logged >= parity_stack.mark
+        and f"WARN stanza=web_ping://{title} " in line
+        and "site offers NTLM authentication, which is not supported" in line
+    ]
+    assert len(warnings) == 1, warnings
+
+
+SCANNED_PATHS = (
+    "/opt/splunk/var/log/splunk",
+    CHECKPOINT_DIR,
+    "/opt/splunk/etc/apps/website_ping*",
+)
+"""Every log of the Splunk instance (_internal and _audit are read from these
+files), the input's checkpoints and the files of website-ping and its config app."""
+
+
+def test_no_credential_in_any_log_or_event(
+    parity_stack: Stack, evidence: Evidence
+) -> None:
+    """Once every check that sends a password has run, no form of any test
+    password is in a Splunk log, the app's log or files, a container's log
+    (target, Squid, Splunk) or an indexed event. The scan never searches Splunk
+    for a password, so its own search history cannot match."""
+    searcher = parity_stack.searcher("so1")
+    for scenario in parity.credential_scenarios(parity.configured_scenarios()):
+        _ = wait_for(
+            INDEXED,
+            lambda s=scenario: check_rows(searcher, s.title, parity_stack.mark),
+            EVENT_TIMEOUT,
+            parity_stack.stages,
+        )
+    secrets = {
+        f"{realm} {user}": credential_forms(
+            PROXY_USER if realm == parity.PROXY_REALM else user, password
+        )
+        for realm, user, password in parity.passwords(
+            parity.configured_scenarios(), stored_passwords=True
+        )
+    }
+    in_files = parse_grep(parity_stack.exec("so1", grep_script(secrets, SCANNED_PATHS)))
+    searcher.search(golden.export_query(0))
+    texts = {
+        f"{service} container log": parity_stack.logs(service)
+        for service in ("target", "squid", "so1")
+    }
+    texts["indexed web_ping events"] = searcher.last_result
+    texts[APP_LOG] = "\n".join(line for _, line in parity_stack.app_log("so1"))
+    found = in_files + find_credentials(texts, secrets)
+    evidence.note(
+        f"{parity_stack.project}.credential-scan",
+        {
+            "secrets": sorted(secrets),
+            "files": list(SCANNED_PATHS),
+            "texts": {name: len(text) for name, text in texts.items()},
+            "found": [list(pair) for pair in found],
+        },
+    )
+    assert not found, "credentials found (source, secret): " + "; ".join(
+        f"{source}: {label}" for source, label in found
+    )

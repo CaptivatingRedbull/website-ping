@@ -16,7 +16,7 @@ from logger import StanzaLogger, log_to_stderr, setup_logging
 from ping_check import CheckResult
 from ping_config import Settings, build_settings
 from wp_context import CheckContext, make_context
-from wp_deadline import Deadline
+from wp_deadline import Phases
 from wp_runner import (
     Checkpoints,
     Runner,
@@ -79,7 +79,7 @@ def settings(name: str, interval: str = "60", **extra: str) -> Settings:
     return built
 
 
-def ok(context: CheckContext, _deadline: Deadline) -> CheckResult:
+def ok(context: CheckContext, _phases: Phases) -> CheckResult:
     return CheckResult(
         response_code=200, elapsed=0.1, finished=1.0, error=context.settings["name"]
     )
@@ -315,10 +315,10 @@ def test_late_start_warns(tmp_path: Path, log_file: Path) -> None:
 def test_check_exception_does_not_stop_the_others(
     tmp_path: Path, log_file: Path
 ) -> None:
-    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, phases: Phases) -> CheckResult:
         if context.settings["name"] == "bad":
             raise RuntimeError("boom")
-        return ok(context, deadline)
+        return ok(context, phases)
 
     h = Harness(tmp_path, [settings("bad"), settings("good")], check=check)
     assert h.cycle() == 2
@@ -359,9 +359,9 @@ def test_closed_stdout_stops_without_checkpoint(
 def test_result_after_stop_is_neither_written_nor_checkpointed(tmp_path: Path) -> None:
     holder: list[Runner] = []
 
-    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, phases: Phases) -> CheckResult:
         holder[0].stop("SIGTERM")
-        return ok(context, deadline)
+        return ok(context, phases)
 
     h = Harness(tmp_path, [settings("a")], check=check)
     holder.append(h.runner)
@@ -464,9 +464,9 @@ def test_stanza_without_context_is_skipped_without_checkpoint(tmp_path: Path) ->
 def test_check_receives_the_context(tmp_path: Path) -> None:
     seen: list[CheckContext] = []
 
-    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, phases: Phases) -> CheckResult:
         seen.append(context)
-        return ok(context, deadline)
+        return ok(context, phases)
 
     contexts = FakeContexts()
     contexts.body_length = 77
@@ -479,9 +479,9 @@ def test_check_receives_the_context(tmp_path: Path) -> None:
 def test_without_contexts_checks_get_the_builtin_values(tmp_path: Path) -> None:
     seen: list[CheckContext] = []
 
-    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, phases: Phases) -> CheckResult:
         seen.append(context)
-        return ok(context, deadline)
+        return ok(context, phases)
 
     h = Harness(tmp_path, [settings("a")], check=check)
     assert h.cycle() == 1
@@ -503,14 +503,14 @@ def test_thread_limit_is_respected(tmp_path: Path) -> None:
     lock = threading.Lock()
     running = [0, 0]  # now, maximum
 
-    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, phases: Phases) -> CheckResult:
         with lock:
             running[0] += 1
             running[1] = max(running)
         _ = release.wait(5)
         with lock:
             running[0] -= 1
-        return ok(context, deadline)
+        return ok(context, phases)
 
     events: list[str] = []
     runner = Runner(
@@ -533,12 +533,14 @@ def test_thread_limit_is_respected(tmp_path: Path) -> None:
 
 def test_tick_expires_overdue_deadline(tmp_path: Path) -> None:
     clock = Clock()
+    started = threading.Event()
     expired = threading.Event()
 
-    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
-        deadline.on_expire(expired.set)
+    def check(context: CheckContext, phases: Phases) -> CheckResult:
+        phases.start(context.settings["timeout"]).on_expire(expired.set)
+        started.set()
         _ = expired.wait(5)
-        return ok(context, deadline)
+        return ok(context, phases)
 
     events: list[str] = []
     runner = Runner(
@@ -552,7 +554,7 @@ def test_tick_expires_overdue_deadline(tmp_path: Path) -> None:
         executor=ThreadPoolExecutor(max_workers=1),
     )
     runner.tick()
-    wait_until(lambda: runner._deadlines != {})  # pyright: ignore[reportPrivateUsage]
+    assert started.wait(5)  # pyright: ignore[reportPrivateUsage]
     clock.advance(4.9)
     runner.tick()
     assert not expired.is_set()
@@ -563,12 +565,53 @@ def test_tick_expires_overdue_deadline(tmp_path: Path) -> None:
     assert runner.shutdown(timeout=1) == 0
 
 
+def test_tick_expires_each_phase_at_its_own_time(tmp_path: Path) -> None:
+    clock = Clock()
+    probe_started, probe_ended = threading.Event(), threading.Event()
+    request_started, request_ended = threading.Event(), threading.Event()
+
+    def check(context: CheckContext, phases: Phases) -> CheckResult:
+        phases.start(5).on_expire(probe_ended.set)
+        probe_started.set()
+        _ = probe_ended.wait(5)
+        phases.start(5).on_expire(request_ended.set)
+        request_started.set()
+        _ = request_ended.wait(5)
+        return ok(context, phases)
+
+    events: list[str] = []
+    runner = Runner(
+        [settings("a", timeout="5")],
+        check,
+        render,
+        events.append,
+        Checkpoints(str(tmp_path)),
+        clock=clock.time,
+        monotonic=clock.monotonic,
+        executor=ThreadPoolExecutor(max_workers=1),
+    )
+    runner.tick()
+    assert probe_started.wait(5)
+    clock.advance(5)
+    runner.tick()
+    assert probe_ended.wait(1)
+    assert request_started.wait(5)
+    clock.advance(4.9)
+    runner.tick()
+    assert not request_ended.is_set()
+    clock.advance(0.1)
+    runner.tick()
+    assert request_ended.wait(1)
+    wait_until(lambda: events == ["a=200\n"])
+    assert runner.shutdown(timeout=1) == 0
+
+
 def test_shutdown_expires_running_checks_and_waits(tmp_path: Path) -> None:
-    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, phases: Phases) -> CheckResult:
         done = threading.Event()
-        deadline.on_expire(done.set)
+        phases.start(context.settings["timeout"]).on_expire(done.set)
         _ = done.wait(5)
-        return ok(context, deadline)
+        return ok(context, phases)
 
     events: list[str] = []
     runner = Runner(
@@ -585,9 +628,9 @@ def test_shutdown_expires_running_checks_and_waits(tmp_path: Path) -> None:
 def test_shutdown_gives_up_after_timeout(tmp_path: Path) -> None:
     release = threading.Event()
 
-    def check(context: CheckContext, deadline: Deadline) -> CheckResult:
+    def check(context: CheckContext, phases: Phases) -> CheckResult:
         _ = release.wait(5)  # ignores the deadline
-        return ok(context, deadline)
+        return ok(context, phases)
 
     runner = Runner(
         [settings("a")], check, render, lambda _e: None, Checkpoints(str(tmp_path))

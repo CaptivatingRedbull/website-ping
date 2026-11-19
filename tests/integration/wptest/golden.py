@@ -59,7 +59,6 @@ ALLOWED_DIFFERENCES: Mapping[str, Mapping[str, str]] = {
     "body-lines": {"_time": INPUT_TIME, "timestamp": INPUT_TIME},
     "slow-body": {ANY_FIELD: "timeout is a total deadline in website-ping"},
     "trickled-body": {ANY_FIELD: "timeout is a total deadline in website-ping"},
-    "ntlm-offered": {ANY_FIELD: "NTLM not supported in website-ping"},
     # A body without a charset in Content-Type and not of a text type: 2.9.7 let
     # chardet guess the charset, website-ping decodes UTF-8. The size stays the
     # same here (one character per byte either way).
