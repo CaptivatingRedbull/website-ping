@@ -32,6 +32,24 @@ LINES: dict[str, SplunkLine] = {
         licence_env=_LICENCE_ENV,
         pythons=("3.9",),
     ),
+    "10.0": SplunkLine(
+        image="splunk/splunk:10.0.12",
+        digest="sha256:2bd564e9dd90234b310ef210b0b5814ca5e54e3592c5b50d696c09c4ecc146d6",
+        licence_env=_LICENCE_ENV,
+        pythons=("3.9",),
+    ),
+    "10.2": SplunkLine(
+        image="splunk/splunk:10.2.9",
+        digest="sha256:dced648eaaa403d8aee927d629f8e4708e5880d56753a41764094024d6ccd7e8",
+        licence_env=_LICENCE_ENV,
+        pythons=("3.13", "3.9"),
+    ),
+    "10.4": SplunkLine(
+        image="splunk/splunk:10.4.5",
+        digest="sha256:e8bd9fbd0c5f5dffc73d84fe62f60e69c1d811fd0c89b22a174a46ce99d2dc1b",
+        licence_env=_LICENCE_ENV,
+        pythons=("3.13", "3.9"),
+    ),
     "10.6": SplunkLine(
         image="splunk/splunk:10.6.1.1",
         digest="sha256:2a7cf9d2e8a2226773a9fac95b5e0e2cc8752496abfb134a21bdf8f67c9ee44d",

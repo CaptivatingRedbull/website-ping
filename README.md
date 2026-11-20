@@ -18,8 +18,8 @@ Monitoring, follow [docs/migration.md](docs/migration.md).
 * Splunk Enterprise 9.4 or 10.x, on premises. Splunk Cloud is not tested.
 * The inputs run on a full Splunk instance (heavy forwarder or standalone);
   universal forwarders have no Python.
-* Splunk's own Python: 3.9 on 9.4, 3.13 on 10.2 and later (see "Python"). The
-  app uses the standard library only.
+* Splunk's own Python: 3.9 on 9.4 and 10.0, 3.13 on 10.2 and later (see
+  "Python"). The app uses the standard library only.
 * Website Monitoring must not be installed on the same instance: both apps
   provide the input `web_ping`.
 
@@ -148,17 +148,19 @@ The input runs on the Python interpreter that Splunk ships with:
 
 | Splunk | Interpreter |
 | --- | --- |
-| 9.4 | Python 3.9 |
-| 10.2 and later | Python 3.13 |
+| 9.4 and 10.0 | Python 3.9 |
+| 10.2 and later | Python 3.13 (3.9 also shipped) |
 
-`default/inputs.conf` sets `python.required = 3.9,3.13`, and Splunk picks the
-highest of these that it has. The code is written for Python 3.9 and tested on
+`default/inputs.conf` sets `python.required = 3.9,3.13`, and Splunk 10.2 and
+later picks the highest of these that it has. Splunk 9.4 and 10.0 ignore
+`python.required` and run the input on `python.version = python3`, which is
+Python 3.9 there. The code is written for Python 3.9 and tested on
 3.9 and 3.13. The input logs the interpreter and OpenSSL version on its start
 line in `splunkd.log`, for example
 `starting stanzas=12 invalid=0 thread_limit=200 pid=4711 python=3.13.11 openssl="OpenSSL 3.5.9 29 Sep 2026"`.
 
-To run the input on Python 3.9 on Splunk 10.x while that version still ships it,
-set this in `local/inputs.conf` of this app:
+To run the input on Python 3.9 on Splunk 10.2 and later while that version still
+ships it, set this in `local/inputs.conf` of this app:
 
 ```
 [web_ping]
@@ -512,7 +514,8 @@ python3 -m venv .venv
 .venv/bin/pytest
 ```
 
-The integration tests run Splunk 9.4 and 10.6 in Docker; see
+The integration tests run every supported Splunk Enterprise line from 9.4 to
+10.6 in Docker (by default the oldest and the newest); see
 [tests/integration/README.md](tests/integration/README.md).
 
 ## License

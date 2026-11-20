@@ -1,8 +1,9 @@
 # Real-network checklist
 
-Run by hand for each release, on each version line (9.4 and 10.6), on this
-host. The harness's test network has no public sites or publicly issued
-certificates, so these checks cover them. Never run them on the main Splunk.
+Run by hand for each release, on each supported line (the keys of `LINES` in
+`tests/integration/wptest/versions.py`), on this host. The harness's test
+network has no public sites or publicly issued certificates, so these checks
+cover them. Never run them on the main Splunk.
 
 They use a throwaway Splunk container on Docker's default bridge, which the
 firewall rule covers. It has the single-instance limits, the
@@ -17,7 +18,7 @@ From the repository root, with Docker access:
 
 ```sh
 python scripts/package.py                     # prints dist/website_ping-<version>.tar.gz
-LINE_IMAGE=splunk/splunk:10.6.1.1             # or splunk/splunk:9.4.17
+LINE_IMAGE=splunk/splunk:10.6.1.1             # the other lines' images are in LINES
 ENV_FILE=$(mktemp) && chmod 600 "$ENV_FILE"
 printf 'SPLUNK_PASSWORD=%s\nSPLUNK_START_ARGS=--accept-license\nSPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com\n' \
   "Wp$(openssl rand -hex 12)" > "$ENV_FILE"

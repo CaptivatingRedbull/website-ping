@@ -1,9 +1,10 @@
 # website-ping integration tests
 
-These tests install the built website-ping package into Splunk Enterprise
-9.4.17 and 10.6.1.1 running in Docker, let Splunk run the input, and check the
-events that reach the index. 9.4 runs the input on Python 3.9; 10.6 ships 3.13
-and 3.9 and runs it on either. The design is in
+These tests install the built website-ping package into every supported
+Splunk Enterprise line (9.4, 10.0, 10.2, 10.4 and 10.6, pinned in `LINES` in
+`wptest/versions.py`) running in Docker, let Splunk run the input, and check
+the events that reach the index. 9.4 and 10.0 run the input on Python 3.9;
+10.2, 10.4 and 10.6 ship 3.13 and 3.9 and run it on either. The design is in
 `docs/designs/website-ping-test-harness.md`.
 
 A bare `pytest` never runs them. They run only when a command-line path names
@@ -16,9 +17,9 @@ A bare `pytest` never runs them. They run only when a command-line path names
   `/data/docker`.
 * Membership of the `docker` group. In a shell started before you joined it,
   run commands as `sg docker -c '<command>'`.
-* The images `splunk/splunk:9.4.17` and `splunk/splunk:10.6.1.1`, plus
-  `python:3.13.18-slim` and `ubuntu/squid:6.6-24.04_edge`. Missing images are
-  pulled on first use.
+* The Splunk images of the lines under test (`splunk/splunk:9.4.17`,
+  `10.0.12`, `10.2.9`, `10.4.5` and `10.6.1.1`), plus `python:3.13.18-slim`
+  and `ubuntu/squid:6.6-24.04_edge`. Missing images are pulled on first use.
 * At least 200 GB free on `/data`, and available memory of the stack's limits
   plus 4 GB: about 6.5 GB for the standalone stack and 13.25 GB for the
   distributed one.
@@ -47,9 +48,10 @@ pytest tests/integration                           # everything, one stack at a 
 
 Options:
 
-* `--splunk-line` takes a line (`9.4`, `10.6`), a comma-separated list of
-  lines (`--splunk-line 9.4,10.6`), `edges` (default: the oldest and the newest
-  line) or `all`. An unknown line stops the session before collection.
+* `--splunk-line` takes a line (`9.4`, `10.0`, `10.2`, `10.4`, `10.6`), a
+  comma-separated list of lines (`--splunk-line 10.0,10.2`), `edges` (default:
+  the oldest and the newest line, 9.4 and 10.6) or `all`. An unknown line
+  stops the session before collection.
 * `--keep` keeps the first failing stack running and stops the session. A
   parity run that includes `test_view_searches.py` keeps its stack even when
   nothing fails, so the views can be opened in Splunk Web: `docker port
@@ -57,16 +59,17 @@ Options:
   `tests/integration/.evidence/<run>/password`, readable only by you. Remove
   kept stacks with `scripts/test-clean.sh`.
 * `--python 3.9`, `--python 3.13` or `--python all` picks the interpreter on
-  lines that ship several (10.6). Without it, such a line runs 3.13, which the
-  app's own `python.required` selects. For 3.9 the config app gets
-  `local/inputs.conf` with `[web_ping] python.required = 3.9`. 9.4 always runs 3.9. The probe
-  (`spike`) and Website Monitoring 2.9.7 (`golden`) choose their own
-  interpreter, so they run only on each line's default. Test ids and stack
-  names carry the runtime, for example `[10.6-py3.9]` and
-  `wptest-106-py39-standalone-<id>`.
+  lines that ship several (10.2, 10.4, 10.6). Without it, such a line runs
+  3.13, which the app's own `python.required` selects. For 3.9 the config app
+  gets `local/inputs.conf` with `[web_ping] python.required = 3.9`. 9.4 and
+  10.0 always run 3.9. The probe (`spike`) and Website Monitoring 2.9.7
+  (`golden`) choose their own interpreter, so they run only on each line's
+  default. Test ids and stack names carry the runtime, for example
+  `[10.6-py3.9]` and `wptest-106-py39-standalone-<id>`.
 
-A standalone stack takes about 7 minutes per line, the no-route stack about
-2 minutes and the distributed stack about 10 minutes.
+A standalone stack takes about 7 minutes per runtime, the no-route stack about
+2 minutes and the distributed stack about 10 minutes. `--splunk-line all
+--python all` has 8 runtimes.
 The parity stack (`-m parity`) runs website-ping with the scenarios of
 `wptest/parity.py` and compares each newest check event with the golden event
 of Website Monitoring 2.9.7 in `tests/golden/2.9.7/` (`wptest/golden.py`,
