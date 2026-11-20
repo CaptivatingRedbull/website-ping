@@ -55,6 +55,9 @@ any other reason. It logs a `heartbeat` line every minute:
 index=_internal sourcetype=website_ping:log heartbeat
 ```
 
+The alert `Website Ping Runner Silent` reports a host whose process stopped
+(see "Searches, macros and alerts").
+
 ## Timeouts and redirects
 
 `timeout` (seconds, default 30) is the time one check may take in total:
@@ -256,3 +259,40 @@ written for it.
 `splunkd.log` only gets the start and stop lines of the input. If the log file
 cannot be opened, everything goes to `splunkd.log` instead, after an ERROR line
 that says why.
+
+## Searches, macros and alerts
+
+The app ships the macros, eventtype, tag, lookup and saved searches of Website
+Monitoring under the same names, so searches, dashboards and alerts written for
+it keep working, and a `local/macros.conf`, `local/eventtypes.conf` or
+`local/savedsearches.conf` copied from it overrides the same settings. The
+lookup generator `web_ping_inputs_lookup_gen` is not shipped; the macro
+`filter_disabled`, which used its lookup, passes every result through.
+
+A check that got no response has an empty `response_code` (the field is set, not
+missing). The searches and the `format_events` macros show such a check as
+`Connection failed`, or `Connection timed out` when it timed out, and count it
+as a failure.
+
+Alerts, both scheduled on every Splunk instance that has the app:
+
+* `Website Performance Problem` (every 5 minutes): sites with a failing response
+  code, a timeout, no response, a slow response or content without the expected
+  string. The macros `response_codes_to_alert_on` and `response_time_threshold`
+  decide what counts as a failure. To exclude sites, set the search of the
+  eventtype `filter_website_monitoring_alerts` in `local/eventtypes.conf`, for
+  example `search = title=localhost`.
+* `Website Ping Runner Silent` (every 10 minutes): hosts whose input process wrote
+  a heartbeat in the last 24 hours but none in the last 10 minutes. Its checks
+  have stopped; restarting Splunk on that host starts the process again.
+
+Set the macro `website_monitoring_search_index` (default `()`, the role's default
+indexes) to the index the inputs write to, for example `index=web`, if that
+index is not searched by default.
+
+All objects are shared with every app (`export = system`), a deliberate
+exception to keeping an app's objects private: searches written for Website
+Monitoring call its macros and lookup from other apps, often `search`. Users
+with the `power` role may change the three threshold macros
+(`response_codes_to_alert_on`, `response_time_threshold`,
+`response_time_threshold_warning`).

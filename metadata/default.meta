@@ -1,4 +1,40 @@
+# Every object is shared with all apps (export = system): searches, alerts and
+# dashboards written for Website Monitoring call these macros, the lookup, the
+# eventtype and the tag from whatever app they live in.
 []
 access = read : [ * ], write : [ admin, sc_admin ]
 export = system
 
+[eventtypes]
+export = system
+
+[lookups]
+export = system
+
+[macros]
+export = system
+
+[props]
+export = system
+
+[savedsearches]
+export = system
+
+[tags]
+export = system
+
+[transforms]
+export = system
+
+# What counts as a failure: power users may change these without admin rights.
+[macros/response_codes_to_alert_on]
+access = read : [ * ], write : [ admin, power ]
+export = system
+
+[macros/response_time_threshold]
+access = read : [ * ], write : [ admin, power ]
+export = system
+
+[macros/response_time_threshold_warning]
+access = read : [ * ], write : [ admin, power ]
+export = system

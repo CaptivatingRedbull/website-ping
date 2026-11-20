@@ -7,7 +7,17 @@ import tarfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).absolute().parent.parent
-APP_ITEMS = ("LICENSE", "README.md", "README", "bin", "default", "metadata", "static")
+APP_ITEMS = (
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "README",
+    "bin",
+    "default",
+    "lookups",
+    "metadata",
+    "static",
+)
 EXCLUDED_NAMES = {"__pycache__", ".DS_Store"}
 EXCLUDED_SUFFIXES = {".pyc", ".orig", ".swp"}
 EXECUTABLES = {"bin/web_ping.py"}

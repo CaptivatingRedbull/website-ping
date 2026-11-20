@@ -9,6 +9,7 @@ ROOT = Path(__file__).absolute().parent.parent
 
 EXPECTED_FILES = {
     "LICENSE",
+    "NOTICE",
     "README.md",
     "README/inputs.conf.spec",
     "README/website_monitoring.conf.spec",
@@ -33,9 +34,15 @@ EXPECTED_FILES = {
     "default/app.conf",
     "default/data/ui/nav/default.xml",
     "default/data/ui/views/README",
+    "default/eventtypes.conf",
     "default/inputs.conf",
+    "default/macros.conf",
     "default/props.conf",
+    "default/savedsearches.conf",
+    "default/tags.conf",
+    "default/transforms.conf",
     "default/website_monitoring.conf",
+    "lookups/http_response_codes.csv",
     "metadata/default.meta",
     "static/appIcon.png",
     "static/appIconAlt.png",
@@ -50,6 +57,7 @@ EXPECTED_FOLDERS = {
     "default/data/ui",
     "default/data/ui/nav",
     "default/data/ui/views",
+    "lookups",
     "metadata",
     "static",
 }
