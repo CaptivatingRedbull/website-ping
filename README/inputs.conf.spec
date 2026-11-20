@@ -120,6 +120,9 @@ ca_certs = <string>
   enough.
 * Blank: the ca_certs of the input's stanza in website_monitoring.conf. If that
   is blank too: the file named by the SSL_CERT_FILE environment variable, else the
+  first operating system CA bundle that exists:
+  /etc/ssl/certs/ca-certificates.crt, /etc/pki/tls/certs/ca-bundle.crt,
+  /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem, /etc/ssl/ca-bundle.pem.
 * If the file cannot be read or no bundle exists, no request is sent and the
   error field says why.
 * The file is read once, when the input starts.

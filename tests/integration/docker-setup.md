@@ -10,7 +10,9 @@ records are in `~/docker-install-records/before` and `~/docker-install-records/a
 
 The commands in steps 1 to 7 were confirmed by the developer on 2026-11-11 as
 the ones that were run. The "Recorded result" lines are taken from the records
-and the current system. The uninstall steps in section 9 have never been run.
+and the current system. The uninstall steps in section 9 have not been run; on
+2026-11-20 each of them was checked against the installed system with read-only
+and dry-run commands.
 
 ## 1. Before-install records
 
@@ -151,6 +153,11 @@ Compare with the before records. Recorded result (11:52:24 UTC):
 * The firewall rule from step 4 is first in `ufw-user-input`.
 * Docker's data root is `/data/docker`.
 
+Docker 29 keeps images and container file systems in containerd's image store
+(storage driver `overlayfs`), under containerd's own root `/var/lib/containerd`
+on the root file system, not under `/data/docker`. Measured on 2026-11-20:
+12 GB in `/var/lib/containerd`, 3.6 GB in `/data/docker`.
+
 ## 8. VPN ranges
 
 If a VPN or another network is added later, check that its range does not
@@ -161,25 +168,50 @@ and this runbook.
 
 ## 9. Uninstall
 
-These steps have never been run, so they are untested. Remove all test
-objects first with `scripts/test-clean.sh`.
+Not run. On 2026-11-20 every step was checked against the installed system
+without changing it: the packages, files, units and the firewall rule exist,
+`apt-get -s purge` removes exactly the six packages below and nothing else, and
+`ufw --dry-run delete` removes exactly the rule from step 4. Installed then:
+`docker-ce` and `docker-ce-cli` `5:29.10.0`, `containerd.io 2.4.2-4`,
+`docker-buildx-plugin 0.39.0`, `docker-compose-plugin 5.8.0`,
+`docker-ce-rootless-extras 5:29.10.0` (upgraded by apt since step 5).
+
+Remove all test objects first with `scripts/test-clean.sh`.
 
 ```sh
 sudo systemctl stop docker.socket docker.service containerd.service
 sudo apt-get purge docker-ce docker-ce-cli containerd.io docker-buildx-plugin \
   docker-compose-plugin docker-ce-rootless-extras
 sudo rm /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.asc
+sudo apt-get update
 sudo rm /etc/docker/daemon.json
+sudo rmdir /etc/docker
 sudo rm /etc/systemd/system/docker.service.d/10-require-data.conf
+sudo rmdir /etc/systemd/system/docker.service.d
 sudo systemctl daemon-reload
 sudo ufw delete deny proto tcp from 10.212.0.0/15 to any port 8000,8088,8089,9997
-sudo gpasswd -d "$USER" docker
+sudo groupdel docker
 sudo sysctl -w net.ipv4.ip_forward=0
 ```
 
+`rmdir` fails if a folder still holds files this runbook did not create; look
+at them before removing anything. The `docker` group did not exist before
+step 5; `groupdel` removes it together with its members. If the purge already
+removed the group, `groupdel` reports that it does not exist.
+
+Purging the packages does not remove their data. Check what is left:
+
+```sh
+sudo du -sh /var/lib/containerd /data/docker
+```
+
+`/var/lib/containerd` holds the images and is used only by containerd; remove
+it with `sudo rm -rf /var/lib/containerd`. Before removing `/data/docker`,
+check that nothing else uses it, because `/data` also holds the main Splunk's
+indexes.
+
 Docker's chains, the `nat` rules and the `docker0` interface stay until the
 next reboot. After the reboot, compare `ip route`, `sysctl net.ipv4.ip_forward`,
-`iptables-save` and `ufw status verbose` with the before records. Images and
-volumes stay in `/data/docker` until that folder is removed by hand. Check that
-nothing else uses it before removing it, because `/data` also holds the main
-Splunk's indexes.
+`iptables-save` and `ufw status verbose` with the before records. Rules added
+after the install on purpose stay and show up as differences; on 2026-11-20
+that was `8089/tcp ALLOW IN 192.168.8.0/21`.

@@ -1,10 +1,146 @@
 # Website Ping
 
-(App ID: ```website_ping```)
-A Splunk app for monitoring the uptime, responsetime, etc. of websites.
+(App ID: `website_ping`)
 
-Inspired by [website-monitoring](https://github.com/LukeMurphey/splunk-website-monitoring/tree/master) 
+A Splunk app that checks web sites at a fixed interval and indexes the response
+code, the response time and, optionally, content checks, headers and the body.
 
+Website Ping replaces Website Monitoring 2.9.7 by Luke Murphey
+([splunk-website-monitoring](https://github.com/LukeMurphey/splunk-website-monitoring)).
+It reads the same `[web_ping://...]` stanzas and `website_monitoring.conf`, writes
+events with the same sourcetype, fields and formats, and ships the same macros,
+eventtype, tag, lookup, saved searches and view names. It has no custom
+JavaScript, no setup page and no `webping` search command. To move from Website
+Monitoring, follow [docs/migration.md](docs/migration.md).
+
+## Requirements
+
+* Splunk Enterprise 9.4 or 10.x, on premises. Splunk Cloud is not tested.
+* The inputs run on a full Splunk instance (heavy forwarder or standalone);
+  universal forwarders have no Python.
+* Splunk's own Python: 3.9 on 9.4, 3.13 on 10.2 and later (see "Python"). The
+  app uses the standard library only.
+* Website Monitoring must not be installed on the same instance: both apps
+  provide the input `web_ping`.
+
+## Install
+
+Build the package from a checkout of this repository and install it:
+
+```sh
+python3 scripts/package.py      # writes dist/website_ping-<version>.tar.gz
+$SPLUNK_HOME/bin/splunk install app dist/website_ping-<version>.tar.gz
+$SPLUNK_HOME/bin/splunk restart
+```
+
+With a deployment server, unpack the package into
+`$SPLUNK_HOME/etc/deployment-apps/` and give its server class
+`restartSplunkd = true`: the input reads its stanzas when it starts.
+
+Inputs go into `local/inputs.conf` of this app or of an app of your own, for
+example `website_ping_inputs`, or are created in Splunk Web under Settings >
+Data inputs > Web Ping:
+
+```ini
+[web_ping://intranet]
+url = https://intranet.example.com/health
+interval = 5m
+title = Intranet
+timeout = 10
+```
+
+Passwords are never written into `inputs.conf` or `website_monitoring.conf`;
+they are kept in `storage/passwords` (see "Authentication" and "Proxies").
+
+## Settings reference
+
+The spec files `README/inputs.conf.spec` and
+`README/website_monitoring.conf.spec` describe every setting in full.
+
+### inputs.conf
+
+Settings of a `[web_ping://<name>]` stanza. A value in `[web_ping]` applies to
+every input that does not set it.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `url` | required | http or https URL to check, without user name or password. |
+| `interval` | required | How often to check: `30s`, `15m`, `2h`, `1d`, `1w`, or seconds. |
+| `title` | the URL | Short name of the site, written into every event. |
+| `configuration` | `default` | Stanza of `website_monitoring.conf` with the proxy and certificate defaults. |
+| `client_certificate` | blank | PEM client certificate (may hold the key), for sites that require one. |
+| `client_certificate_key` | blank | PEM key of the client certificate, if not in the certificate file. |
+| `username` | blank | User for HTTP authentication; the password comes from `storage/passwords`. |
+| `password` | - | Not supported: a value makes the input refuse to run. |
+| `user_agent` | `Splunk Website Ping/<version>` | `User-Agent` header of every request. |
+| `should_contain_string` | blank | Text the body must contain; sets `has_expected_string`. |
+| `timeout` | `30` | Seconds one check may take in total. |
+| `max_redirects` | blank (30) | Redirects to follow; `0` follows none. |
+| `return_body` | `false` | Index the body as a second event with sourcetype `<sourcetype>:response`. |
+| `return_headers` | `false` | Add a `header_<Name>` field per response header. |
+| `warning_threshold` | blank | Response time in ms above which the check counts as a warning. |
+| `error_threshold` | blank | Response time in ms above which the check counts as failed. |
+| `ssl_verify` | blank (the configuration's, else `false`) | Check the server certificate and host name. |
+| `ca_certs` | blank (the configuration's, else the OS bundle) | PEM file with the CAs to trust when verifying. |
+| `log_level` | `INFO` | Lowest level written to `website_ping.log` for this input. |
+
+Splunk's own settings work as for any input: `index`, `host`, `sourcetype`
+(default `web_ping`) and `disabled`. `python.required` is read from
+`[web_ping]` only.
+
+### website_monitoring.conf
+
+Settings of `[default]` and of named stanzas that inputs select with
+`configuration = <name>`. The file is read in the app's view: from
+`website_ping/local/` or from another app that exports it (`export = system`).
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `proxy_server` | blank | HTTP proxy for every request of the inputs that use the stanza. |
+| `proxy_port` | blank (80) | Proxy port, 1 to 65535; anything else stops those inputs. |
+| `proxy_user` | blank | Proxy user; the password comes from `storage/passwords`. |
+| `proxy_password` | - | Not supported: a value stops the inputs that use the stanza. |
+| `proxy_type` | `http` | Only `http`; `socks4` and `socks5` stop the inputs that use the stanza. |
+| `proxy_ignore` | blank | Hosts that bypass proxies from the environment (not `proxy_server`). |
+| `thread_limit` | `200` | Checks running at the same time; `[default]` only, read at start. |
+| `max_response_body_length` | `1000` | Characters of the body indexed with `return_body`; `-1` all, `0` none. `[default]` only. |
+| `ssl_verify` | `false` | `ssl_verify` of inputs that leave it blank. |
+| `ca_certs` | blank | `ca_certs` of inputs that leave it blank. |
+
+The stanza `[wp_defaults]` is reserved: the app ships it empty and reads
+`[default]` through it.
+
+## Events
+
+Every check writes one event with sourcetype `web_ping` (or the input's
+`sourcetype`), source `web_ping://<name>` and, if the input sets `host`, that
+host. Its time is the end of the check. The text is a list of `key=value`
+pairs in this order; a value with a space is quoted:
+
+```
+response_code=200 total_time=52.17 request_time=52.17 timed_out=False title=Intranet url=https://intranet.example.com/health timeout=10 proxy_server="" proxy_type=http proxy_port="" content_md5=... content_sha224=... content_size=1532
+```
+
+| Field | Value |
+| --- | --- |
+| `response_code` | HTTP status of the last response. Empty when no complete response arrived: timeout, connection or TLS error, redirect limit. |
+| `total_time` | Milliseconds (two decimals) from the request to the end of the body, including decoding and hashing. Empty without a response. |
+| `request_time` | The same value as `total_time`; Website Monitoring wrote both. |
+| `timed_out` | `True` when the check did not finish within `timeout`, else `False`. |
+| `title`, `url`, `timeout` | The input's settings; `url` as written in `inputs.conf`. |
+| `header_<Name>` | With `return_headers = true`: one field per response header. |
+| `proxy_server`, `proxy_type`, `proxy_user`, `proxy_port` | The proxy settings of the input's `website_monitoring.conf` stanza, as written there; `proxy_user` only if set. |
+| `content_md5`, `content_sha224`, `content_size` | Hashes and length of the decoded body, when a response arrived (see "Content checks"). |
+| `has_expected_string` | `true` or `false`, with `should_contain_string`, when a response arrived. |
+| `exceeded_redirects` | `True` when the redirect limit was reached; absent otherwise. |
+| `max_redirects`, `warning_threshold`, `error_threshold` | The input's settings, when set. |
+| `error` | Only on failure, why there is no response, for example `ConnectionRefusedError: [Errno 111] Connection refused`, `SSLCertVerificationError: certificate has expired` or `redirect limit of 30 reached`. A timeout has no `error`. |
+
+Splunk adds `timestamp=none`, as it did for Website Monitoring's events.
+
+With `return_body = true`, a second event with sourcetype `web_ping:response`
+holds the body, with the same source, host, index and time (see "Content
+checks").
 
 ## Python
 
@@ -237,8 +373,8 @@ first `max_response_body_length` characters (`[default]` of
 multi-line body stays one event, and its time is the time of the check even when
 the page contains a date (the app ships `DATETIME_CONFIG = NONE` for the
 sourcetype). Characters that XML does not allow, such as control characters in a
-binary body, are removed; an empty body gives no body event. The body can contain
-personal data from the page, so enable it only where that is acceptable.
+binary body, are removed; an empty body gives no body event. See "Data
+protection" before turning it on.
 
 ## Logging
 
@@ -296,3 +432,90 @@ Monitoring call its macros and lookup from other apps, often `search`. Users
 with the `power` role may change the three threshold macros
 (`response_codes_to_alert_on`, `response_time_threshold`,
 `response_time_threshold_warning`).
+
+## Dashboards
+
+The views keep Website Monitoring's names, so bookmarks and links with
+`form.title=`, `earliest` and `latest` keep working. They are Simple XML without
+custom JavaScript.
+
+| View | Label | Shows |
+| --- | --- | --- |
+| `status_overview` | Status Overview | One row per input: status, response code, response time, last check; filter on failures or warnings. The app's start page. |
+| `status_history` | Status History | One site over time: availability, failures, response time with the warning and failure thresholds. |
+| `site_changes` | Change History | When the content of a site changed, with sizes and hashes before and after, and the versions of the content. |
+| `exec_summary` | Executive Summary | Failed, warning and OK sites, sites monitored, average response time, availability per site. |
+| `web_ping_logs` | Health > Logs | Lines of `website_ping.log` by level, input and host. |
+| `web_ping_status` | Health > Status | Each host's input process: last heartbeat, Python and OpenSSL version, load, results per input, starts and stops. |
+
+The Health views search `_internal`, so they need a role that may search that
+index. Inputs are created in Settings > Data inputs, or in `inputs.conf`; the
+batch creator, setup page, ad-hoc check and feature tour of Website Monitoring
+are not part of this app.
+
+## Distributed deployment
+
+| Instance | What it needs |
+| --- | --- |
+| Heavy forwarder (or standalone) that runs the inputs | The app and the inputs. The app's `props.conf` sets the event time and the log sourcetype where the data is parsed, which is here. Disable both alerts unless people search on this instance: `enableSched = 0` for `Website Performance Problem` and `Website Ping Runner Silent` in `local/savedsearches.conf`. |
+| Search heads (a cluster through its deployer) | The app without inputs: macros, eventtype, tag, lookup, saved searches, views and the search-time fields of `website_ping:log`. |
+| Indexers | Nothing, as long as the inputs run on a heavy forwarder: it sends parsed data. |
+
+Do not run inputs on search head cluster members. Website Monitoring ran them
+on the captain only; Website Ping has no such check, so every member would run
+every input.
+
+## Known limitations
+
+* Resolving the host name (DNS) is not covered by `timeout`, and a server that
+  sends its TLS handshake a few bytes at a time can hold a check beyond it.
+* NTLM and Negotiate authentication are not supported; such sites are checked
+  without credentials and report their `401`.
+* SOCKS proxies are not supported; inputs that use one do not run.
+* Sites that speak only TLS 1.0 or 1.1 fail on every Splunk version.
+* Host names with `ß`, `ς`, joiner characters or full-width letters are
+  refused, because their ASCII form depends on the IDNA version; write them in
+  their `xn--` form.
+* The input reads its stanzas when it starts. Changes to `website_monitoring.conf`
+  take effect within 10 minutes; `thread_limit`, CA files and client
+  certificates at the next restart.
+
+## Deviations from Splunk guidance
+
+* Certificates are not verified unless `ssl_verify = true` is set, for
+  compatibility with Website Monitoring (see "Certificates and TLS"). New
+  deployments should set `ssl_verify = true` in `[web_ping]`.
+* Every knowledge object is exported to all apps (see "Searches, macros and
+  alerts").
+
+## Data protection
+
+`return_body = true` indexes the text of the checked page, which can contain
+personal data. `return_headers = true` indexes every response header, which can
+include session cookies (`Set-Cookie`). Both are off by default. Turn them on
+only where that data may be stored, keep the body short with
+`max_response_body_length`, and restrict access to the index the inputs write
+to.
+
+Credentials are read from `storage/passwords` only and never appear in events
+or in `website_ping.log`.
+
+## Testing
+
+Unit tests, lint and type checks run without Splunk:
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-test.txt
+.venv/bin/ruff check . && .venv/bin/ruff format --check .
+.venv/bin/pyright
+.venv/bin/pytest
+```
+
+The integration tests run Splunk 9.4 and 10.6 in Docker; see
+[tests/integration/README.md](tests/integration/README.md).
+
+## License
+
+MIT, see `LICENSE`. `NOTICE` names the material derived from Website Monitoring
+and its licence.
