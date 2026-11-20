@@ -48,9 +48,12 @@ pytest tests/integration                           # everything, one stack at a 
 Options:
 
 * `--splunk-line 9.4`, `--splunk-line 10.6` or `--splunk-line all` (default).
-* `--keep` keeps the first failing stack running and stops the session. Its
-  admin password is in `tests/integration/.evidence/<run>/password`, readable
-  only by you. Remove kept stacks with `scripts/test-clean.sh`.
+* `--keep` keeps the first failing stack running and stops the session. A
+  parity run that includes `test_view_searches.py` keeps its stack even when
+  nothing fails, so the views can be opened in Splunk Web: `docker port
+  <stack>-so1-1 8000` names the port on 127.0.0.1. The admin password is in
+  `tests/integration/.evidence/<run>/password`, readable only by you. Remove
+  kept stacks with `scripts/test-clean.sh`.
 * `--python 3.9`, `--python 3.13` or `--python all` picks the interpreter on
   10.6. Without it, 10.6 runs 3.13, which the app's own `python.required`
   selects. For 3.9 the config app gets `local/inputs.conf` with

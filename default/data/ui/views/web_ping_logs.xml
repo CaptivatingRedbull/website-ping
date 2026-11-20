@@ -1,0 +1,125 @@
+<form version="1.1">
+  <label>Logs</label>
+  <description>Lines of website_ping.log, the input's own log file in var/log/splunk of the Splunk installation (index _internal, sourcetype website_ping:log). It replaces Website Monitoring's web_availability_modular_input.log, which is no longer written. Only roles that may search _internal see these lines.</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="level" searchWhenChanged="true">
+      <label>Level</label>
+      <choice value="level=*">All</choice>
+      <choice value="level=DEBUG">DEBUG</choice>
+      <choice value="level!=DEBUG">INFO and above</choice>
+      <choice value="(level=WARN OR level=ERROR)">WARN and above</choice>
+      <choice value="level=ERROR">ERROR</choice>
+      <default>level!=DEBUG</default>
+    </input>
+    <input type="dropdown" token="stanza" searchWhenChanged="true">
+      <label>Input</label>
+      <choice value="*">All inputs and the runner</choice>
+      <default>*</default>
+      <allowCustomValues>true</allowCustomValues>
+      <fieldForLabel>stanza</fieldForLabel>
+      <fieldForValue>stanza</fieldForValue>
+      <search>
+        <query>index=_internal sourcetype="website_ping:log" | stats count by stanza | sort 0 stanza</query>
+      </search>
+    </input>
+    <input type="dropdown" token="host" searchWhenChanged="true">
+      <label>Host</label>
+      <choice value="*">All hosts</choice>
+      <default>*</default>
+      <allowCustomValues>true</allowCustomValues>
+      <fieldForLabel>host</fieldForLabel>
+      <fieldForValue>host</fieldForValue>
+      <search>
+        <query>index=_internal sourcetype="website_ping:log" | stats count by host | sort 0 host</query>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Log lines by level</title>
+        <search>
+          <query>index=_internal sourcetype="website_ping:log" host=$host|s$ stanza=$stanza|s$ $level$
+| timechart count by level</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.fieldColors">{"DEBUG":0x708794,"INFO":0x006D9C,"WARN":0xF8BE34,"ERROR":0xDC4E41}</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.drilldown">none</option>
+        <option name="height">250</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>Lines per level</title>
+        <search>
+          <query>index=_internal sourcetype="website_ping:log" host=$host|s$ stanza=$stanza|s$ $level$
+| stats sparkline count by level
+| eval order=case(level=="ERROR", 0, level=="WARN", 1, level=="INFO", 2, true(), 3)
+| sort 0 order
+| fields - order</query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">false</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="level">
+          <colorPalette type="map">{"WARN":#F8BE34,"ERROR":#DC4E41}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Inputs with warnings or errors (click a row to show its lines below)</title>
+        <search>
+          <query>index=_internal sourcetype="website_ping:log" host=$host|s$ stanza=$stanza|s$ (level=WARN OR level=ERROR)
+| stats count(eval(level=="ERROR")) as errors count(eval(level=="WARN")) as warnings latest(message) as latest_message latest(_time) as last_seen by host stanza
+| sort 0 -errors -warnings stanza
+| convert ctime(last_seen)</query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="errors">
+          <colorPalette type="list">[#FFFFFF,#DC4E41]</colorPalette>
+          <scale type="threshold">1</scale>
+        </format>
+        <drilldown>
+          <set token="form.stanza">$row.stanza$</set>
+          <set token="form.host">$row.host$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Latest log lines</title>
+        <search>
+          <query>index=_internal sourcetype="website_ping:log" host=$host|s$ stanza=$stanza|s$ $level$
+| sort 1000 -_time
+| table _time host level stanza message</query>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="level">
+          <colorPalette type="map">{"WARN":#F8BE34,"ERROR":#DC4E41}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+</form>

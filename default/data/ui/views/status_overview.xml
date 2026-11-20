@@ -1,0 +1,91 @@
+<form version="1.1">
+  <label>Status Overview</label>
+  <description>Latest result of every website check in the time range. Click a row for its history.</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="show" searchWhenChanged="true">
+      <label>Show</label>
+      <choice value="*">All checks</choice>
+      <choice value="Failed">Only failures</choice>
+      <choice value="Warning">Only warnings</choice>
+      <default>*</default>
+    </input>
+  </fieldset>
+  <search id="status_by_input">
+    <query>sourcetype="web_ping" `website_monitoring_search_index`
+| `set_response_code`
+| `set_status`
+| stats sparkline(avg(total_time)) as sparkline_response_time latest(title) as title latest(url) as url latest(status) as status latest(response_code) as response latest(total_time) as response_time avg(total_time) as average max(total_time) as maximum count as checks range(_time) as span latest(_time) as last_checked by source
+| eval usual_gap=if(checks &gt; 1, span / (checks - 1), null())
+| eval stale=case(isnull(usual_gap), "unknown", now() - last_checked &gt; 2 * usual_gap, "yes", true(), "no")
+| eval response_time=round(response_time, 0), average=round(average, 0), maximum=round(maximum, 0)
+| `timesince(last_checked,last_checked)`</query>
+    <refresh>2m</refresh>
+    <refreshType>delay</refreshType>
+  </search>
+  <row>
+    <panel>
+      <title>Websites</title>
+      <table>
+        <search base="status_by_input">
+          <query>| search status="$show$"
+| eval rank=case(status=="Failed", 0, status=="Warning", 1, true(), 2)
+| sort 0 rank title
+| table title url status response response_time average maximum sparkline_response_time last_checked stale</query>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">false</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"OK":#53A051,"Warning":#F8BE34,"Failed":#DC4E41}</colorPalette>
+        </format>
+        <format type="color" field="response">
+          <colorPalette type="expression">if(match(value, "^[1-3][0-9][0-9]( true)?$"), "#53A051", "#DC4E41")</colorPalette>
+        </format>
+        <format type="color" field="stale">
+          <colorPalette type="map">{"yes":#F8BE34}</colorPalette>
+        </format>
+        <format type="number" field="response_time">
+          <option name="precision">0</option>
+          <option name="unit">ms</option>
+        </format>
+        <format type="number" field="average">
+          <option name="precision">0</option>
+          <option name="unit">ms</option>
+        </format>
+        <format type="number" field="maximum">
+          <option name="precision">0</option>
+          <option name="unit">ms</option>
+        </format>
+        <format type="sparkline" field="sparkline_response_time">
+          <option name="type">bar</option>
+          <option name="height">20</option>
+          <option name="barColor">#53A051</option>
+          <option name="colorMap">
+            <option name="800:1000">#F8BE34</option>
+            <option name="1000:">#DC4E41</option>
+          </option>
+        </format>
+        <drilldown>
+          <link target="_self"><![CDATA[/app/website_ping/status_history?form.title=$row.title|u$&earliest=$earliest$&latest=$latest$]]></link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <html>
+        <p>A check is <b>Failed</b> when its response code matches the macro <code>response_codes_to_alert_on</code> (default: 400 and above), when no response arrived, when the page lacks the expected text, or when the response took at least <code>response_time_threshold</code> ms (default 1000). It is a <b>Warning</b> from <code>response_time_threshold_warning</code> ms (default 800). An input with its own <code>error_threshold</code> and <code>warning_threshold</code> uses those instead of the two time macros.</p>
+        <p>Change what counts as a failure in <a href="../../manager/website_ping/data/macros?search=response_">Settings › Advanced search › Search macros</a>.</p>
+        <p><b>stale</b> is <i>yes</i> when the latest check of an input is older than twice its usual interval: the input was disabled or removed, or its checks stopped running.</p>
+      </html>
+    </panel>
+  </row>
+</form>

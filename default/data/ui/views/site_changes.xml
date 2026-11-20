@@ -1,0 +1,62 @@
+<form version="1.1">
+  <label>Change History</label>
+  <description>When the content of a page changed. Only checks that received a response have a content hash, so failed checks are left out.</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="title" searchWhenChanged="true">
+      <label>Site title</label>
+      <choice value="*">All sites</choice>
+      <default>*</default>
+      <allowCustomValues>true</allowCustomValues>
+      <fieldForLabel>title</fieldForLabel>
+      <fieldForValue>title</fieldForValue>
+      <search>
+        <query>sourcetype="web_ping" `website_monitoring_search_index` content_sha224=* | stats count by title | sort 0 title</query>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <title>Content changes</title>
+        <search>
+          <query>sourcetype="web_ping" `website_monitoring_search_index` title=$title|s$ content_sha224=*
+| streamstats current=f last(_time) as changed last(content_sha224) as new_hash last(content_size) as size_after by source
+| where new_hash!=content_sha224
+| rename content_sha224 as previous_hash, content_size as size_before
+| convert ctime(changed)
+| table changed title url size_before size_after previous_hash new_hash</query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">false</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Content versions</title>
+        <search>
+          <query>sourcetype="web_ping" `website_monitoring_search_index` title=$title|s$ content_sha224=*
+| stats count as checks min(_time) as first_seen max(_time) as last_seen latest(content_size) as content_size by source title url content_sha224
+| sort 0 title -first_seen
+| `timesince(first_seen,since_first_seen)`
+| convert ctime(first_seen) ctime(last_seen)
+| table title url first_seen since_first_seen last_seen checks content_size content_sha224</query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">false</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>

@@ -1,0 +1,143 @@
+<form version="1.1">
+  <label>Status History</label>
+  <description>Response times, availability and failures of one site or all sites.</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="title" searchWhenChanged="true">
+      <label>Site title</label>
+      <choice value="*">All sites</choice>
+      <default>*</default>
+      <allowCustomValues>true</allowCustomValues>
+      <fieldForLabel>title</fieldForLabel>
+      <fieldForValue>title</fieldForValue>
+      <search>
+        <query>sourcetype="web_ping" `website_monitoring_search_index` | stats count by title | sort 0 title</query>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <single>
+        <search>
+          <query>sourcetype="web_ping" `website_monitoring_search_index` title=$title|s$
+| timechart avg(total_time) as response_time</query>
+        </search>
+        <option name="underLabel">Average Response Time</option>
+        <option name="unit">ms</option>
+        <option name="numberPrecision">0</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[799,999]</option>
+        <option name="rangeColors">["0x53A051","0xF8BE34","0xDC4E41"]</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trendDisplayMode">percent</option>
+        <option name="trendColorInterpretation">inverse</option>
+        <option name="useThousandSeparators">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <search>
+          <query>sourcetype="web_ping" `website_monitoring_search_index` title=$title|s$
+| stats max(total_time) as response_time</query>
+        </search>
+        <option name="underLabel">Maximum Response Time</option>
+        <option name="unit">ms</option>
+        <option name="numberPrecision">0</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[799,999]</option>
+        <option name="rangeColors">["0x53A051","0xF8BE34","0xDC4E41"]</option>
+        <option name="useThousandSeparators">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <search>
+          <query>sourcetype="web_ping" `website_monitoring_search_index` title=$title|s$
+| eval failed=if(response_code&gt;=400 OR timed_out=="True" OR isnull(response_code) OR response_code=="", 1, 0)
+| stats count as checks sum(failed) as failures
+| eval availability=if(checks &gt; 0, round(100 * (checks - failures) / checks, 2), null())
+| fields availability</query>
+        </search>
+        <option name="underLabel">Availability</option>
+        <option name="unit">%</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[99]</option>
+        <option name="rangeColors">["0xDC4E41","0x53A051"]</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <search>
+          <query>sourcetype="web_ping" `website_monitoring_search_index` title=$title|s$ `filter_inoperable`
+| stats count as failures</query>
+        </search>
+        <option name="underLabel">Failures</option>
+        <option name="numberPrecision">0</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x53A051","0xDC4E41"]</option>
+        <option name="useThousandSeparators">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Average response time (lines: Warning and Failed thresholds)</title>
+        <search>
+          <query>sourcetype="web_ping" `website_monitoring_search_index` title=$title|s$
+| eval failed_from=coalesce(error_threshold, `response_time_threshold`), warning_from=coalesce(warning_threshold, `response_time_threshold_warning`)
+| timechart avg(total_time) as response_time max(warning_from) as warning_from max(failed_from) as failed_from</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.overlayFields">warning_from,failed_from</option>
+        <option name="charting.fieldColors">{"response_time":0x53A051,"warning_from":0xF8BE34,"failed_from":0xDC4E41}</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">ms</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.drilldown">none</option>
+        <option name="height">250</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Failures</title>
+        <search>
+          <query>sourcetype="web_ping" `website_monitoring_search_index` title=$title|s$ `filter_inoperable`
+| `format_events_ex`
+| eval response_time=round(response_time, 0)</query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+        <format type="number" field="response_time">
+          <option name="precision">0</option>
+          <option name="unit">ms</option>
+        </format>
+      </table>
+    </panel>
+  </row>
+</form>

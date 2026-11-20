@@ -29,6 +29,7 @@ services:
     cpus: 2
     ports:
       - "127.0.0.1::8089"
+      - "127.0.0.1::8000"
     volumes:
       - so1-etc:/opt/splunk/etc
       - so1-var:/opt/splunk/var

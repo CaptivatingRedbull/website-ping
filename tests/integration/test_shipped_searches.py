@@ -28,6 +28,9 @@ GOLDEN_DIR = ROOT / "tests" / "golden" / legacy.LEGACY_VERSION
 SAVED_SEARCHES = ROOT / "default" / "savedsearches.conf"
 EVENT_TIMEOUT = 180
 HEARTBEAT_TIMEOUT = 180
+THRESHOLD_MACRO = "`response_time_threshold`"
+NO_CHECK_THIS_SLOW = 60_000
+"""Milliseconds; more than any check's timeout in the parity scenarios."""
 
 FAILED = ("refused", "timeout", "status-503")
 """No connection, no response within the timeout, an error status."""
@@ -69,6 +72,18 @@ def shipped_search(name: str) -> str:
     return read_conf(SAVED_SEARCHES)[name]["search"]
 
 
+def without_slow_checks(name: str) -> str:
+    """The shipped search with a response time threshold no check reaches.
+
+    Right after a runner start every check begins at once, and on a busy stack
+    single checks of healthy sites then take over the default 1000 ms. The
+    search would list them as slow, so its rows would depend on the stack's
+    load; with this threshold it lists only failed checks."""
+    text = shipped_search(name)
+    assert text.count(THRESHOLD_MACRO) == 1, name
+    return "search " + text.replace(THRESHOLD_MACRO, str(NO_CHECK_THIS_SLOW))
+
+
 def first_event(stack: Stack, title: str) -> list[dict[str, str]] | None:
     rows = stack.searcher("so1").search(f"{base_query(stack, (title,))} | head 1")
     return rows or None
@@ -104,7 +119,7 @@ def expected_alert_rows() -> list[Mapping[str, object]]:
 def test_alert_reports_failures_like_website_monitoring(stack: Stack) -> None:
     """Same rows as 2.9.7's alert; a timeout reads "Connection timed out"."""
     recorded = next(s for s in searches.SEARCHES if s.name == "alert")
-    rows = run(stack.rest("so1"), recorded.query)
+    rows = run(stack.rest("so1"), without_slow_checks("Website Performance Problem"))
     assert searches.normalise_rows(recorded, rows) == expected_alert_rows()
 
 
@@ -156,7 +171,7 @@ def test_availability_overview_names_failed_connections(stack: Stack) -> None:
 
 
 def test_performance_problems_lists_failed_sites(stack: Stack) -> None:
-    rows = run(stack.rest("so1"), "| savedsearch website_performance_problems")
+    rows = run(stack.rest("so1"), without_slow_checks("website_performance_problems"))
     codes = {title: row.get("response_code") for title, row in by_title(rows).items()}
     assert codes == {
         "refused": "Connection failed",

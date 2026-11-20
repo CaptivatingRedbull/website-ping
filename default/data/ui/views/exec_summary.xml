@@ -1,0 +1,166 @@
+<form version="1.1">
+  <label>Executive Summary</label>
+  <description>Latest status of every input and the availability of each site. Click a tile or a row for the details.</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="title" searchWhenChanged="true">
+      <label>Site title</label>
+      <choice value="*">All sites</choice>
+      <default>*</default>
+      <allowCustomValues>true</allowCustomValues>
+      <fieldForLabel>title</fieldForLabel>
+      <fieldForValue>title</fieldForValue>
+      <search>
+        <query>sourcetype="web_ping" `website_monitoring_search_index` | stats count by title | sort 0 title</query>
+      </search>
+    </input>
+  </fieldset>
+  <search id="status_by_input">
+    <query>sourcetype="web_ping" `website_monitoring_search_index` title=$title|s$
+| eval unavailable=if(response_code&gt;=400 OR timed_out=="True" OR isnull(response_code) OR response_code=="", 1, 0)
+| `set_response_code`
+| `set_status`
+| stats latest(title) as title latest(url) as url latest(status) as status count as checks sum(unavailable) as failures avg(total_time) as average sum(total_time) as time_sum count(total_time) as timed_checks by source</query>
+    <refresh>1m</refresh>
+    <refreshType>delay</refreshType>
+  </search>
+  <row>
+    <panel>
+      <single>
+        <search base="status_by_input">
+          <query>| search status="Failed" | stats count</query>
+        </search>
+        <option name="underLabel">Sites with Failures</option>
+        <option name="numberPrecision">0</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x708794","0xDC4E41"]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_self"><![CDATA[/app/website_ping/status_overview?form.show=Failed&earliest=$earliest$&latest=$latest$]]></link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <search base="status_by_input">
+          <query>| search status="Warning" | stats count</query>
+        </search>
+        <option name="underLabel">Sites with Warnings</option>
+        <option name="numberPrecision">0</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x708794","0xF8BE34"]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_self"><![CDATA[/app/website_ping/status_overview?form.show=Warning&earliest=$earliest$&latest=$latest$]]></link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <search base="status_by_input">
+          <query>| search status="OK" | stats count</query>
+        </search>
+        <option name="underLabel">Sites OK</option>
+        <option name="numberPrecision">0</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0]</option>
+        <option name="rangeColors">["0x708794","0x53A051"]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_self"><![CDATA[/app/website_ping/status_overview?earliest=$earliest$&latest=$latest$]]></link>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <search base="status_by_input">
+          <query>| stats count</query>
+        </search>
+        <option name="underLabel">Sites Monitored</option>
+        <option name="numberPrecision">0</option>
+        <option name="colorMode">none</option>
+        <option name="useColors">0</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_self"><![CDATA[/app/website_ping/status_overview?earliest=$earliest$&latest=$latest$]]></link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <search base="status_by_input">
+          <query>| stats sum(time_sum) as time_sum sum(timed_checks) as timed_checks
+| eval average=if(timed_checks &gt; 0, round(time_sum / timed_checks, 0), null())
+| fields average</query>
+        </search>
+        <option name="underLabel">Average Response Time</option>
+        <option name="unit">ms</option>
+        <option name="numberPrecision">0</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[799,999]</option>
+        <option name="rangeColors">["0x53A051","0xF8BE34","0xDC4E41"]</option>
+        <option name="useThousandSeparators">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Availability per site</title>
+        <search base="status_by_input">
+          <query>| eval availability=round(100 * (checks - failures) / checks, 2), average=round(average, 0)
+| sort 0 availability title
+| table title url status availability checks failures average</query>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">false</option>
+        <option name="drilldown">row</option>
+        <format type="color" field="status">
+          <colorPalette type="map">{"OK":#53A051,"Warning":#F8BE34,"Failed":#DC4E41}</colorPalette>
+        </format>
+        <format type="color" field="availability">
+          <colorPalette type="list">[#DC4E41,#53A051]</colorPalette>
+          <scale type="threshold">99</scale>
+        </format>
+        <format type="number" field="availability">
+          <option name="precision">2</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="number" field="average">
+          <option name="precision">0</option>
+          <option name="unit">ms</option>
+        </format>
+        <drilldown>
+          <link target="_self"><![CDATA[/app/website_ping/status_history?form.title=$row.title|u$&earliest=$earliest$&latest=$latest$]]></link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <html>
+        <p>The tiles count inputs by the status of their latest check, as in <a href="status_overview">Status Overview</a>: <b>Failed</b> covers error codes, checks without a response, pages without the expected text and responses slower than the failure threshold; <b>Warning</b> covers responses slower than the warning threshold. Availability counts only error codes (400 and above), timeouts and checks without a response as unavailable, as in <a href="status_history">Status History</a>.</p>
+      </html>
+    </panel>
+  </row>
+</form>

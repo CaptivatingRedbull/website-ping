@@ -1,0 +1,144 @@
+<form version="1.1">
+  <label>Status</label>
+  <description>Health of the website-ping runner on each host that runs the inputs: heartbeat, load, starts, and whether every input still writes events. Runner panels read website_ping.log (index _internal); only roles that may search _internal see them.</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="host" searchWhenChanged="true">
+      <label>Runner host</label>
+      <choice value="*">All hosts</choice>
+      <default>*</default>
+      <allowCustomValues>true</allowCustomValues>
+      <fieldForLabel>host</fieldForLabel>
+      <fieldForValue>host</fieldForValue>
+      <search>
+        <query>index=_internal sourcetype="website_ping:log" stanza="(process)" | stats count by host | sort 0 host</query>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <title>Runners</title>
+        <search>
+          <query><![CDATA[index=_internal sourcetype="website_ping:log" host=$host|s$ stanza="(process)" (message="heartbeat *" OR message="starting stanzas=*")
+| rex field=message "^heartbeat stanzas=(?<stanzas>\d+) in_flight=(?<in_flight>\d+) queued=(?<queued>\d+) late=(?<late>\d+) events=(?<events>\d+)"
+| rex field=message "^starting stanzas=\d+ invalid=(?<invalid>\d+) thread_limit=(?<thread_limit>\d+) pid=(?<pid>\d+) python=(?<python>\S+) openssl=\"(?<openssl>[^\"]*)\""
+| eval heartbeat_time=if(isnotnull(in_flight), _time, null()), start_time=if(isnotnull(pid), _time, null())
+| stats max(heartbeat_time) as last_heartbeat max(start_time) as started latest(stanzas) as stanzas latest(invalid) as invalid latest(thread_limit) as thread_limit latest(in_flight) as in_flight latest(queued) as queued latest(version) as version latest(python) as python latest(openssl) as openssl by host
+| eval silent=case(isnull(last_heartbeat), "no heartbeat", now() - last_heartbeat > 600, "yes", true(), "no")
+| `timesince(last_heartbeat,last_heartbeat)`
+| convert ctime(started)
+| table host silent last_heartbeat started stanzas invalid thread_limit in_flight queued version python openssl]]></query>
+          <refresh>1m</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="silent">
+          <colorPalette type="map">{"yes":#DC4E41,"no heartbeat":#DC4E41,"no":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="invalid">
+          <colorPalette type="list">[#FFFFFF,#F8BE34]</colorPalette>
+          <scale type="threshold">1</scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Runner load (average of the heartbeats; checks started late: total)</title>
+        <search>
+          <query><![CDATA[index=_internal sourcetype="website_ping:log" host=$host|s$ stanza="(process)" message="heartbeat *"
+| rex field=message "^heartbeat stanzas=\d+ in_flight=(?<in_flight>\d+) queued=(?<queued>\d+) late=(?<late>\d+) events=(?<events>\d+)"
+| timechart avg(in_flight) as checks_running avg(queued) as checks_waiting sum(late) as checks_started_late]]></query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.fieldColors">{"checks_running":0x006D9C,"checks_waiting":0xF8BE34,"checks_started_late":0xDC4E41}</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.drilldown">none</option>
+        <option name="height">250</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Check results per input (the 20 inputs with the most events, the rest as OTHER)</title>
+        <search>
+          <query>sourcetype="web_ping" `website_monitoring_search_index`
+| timechart limit=20 useother=true count by source</query>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.nullValueMode">zero</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.drilldown">none</option>
+        <option name="height">300</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Last event per input</title>
+        <search>
+          <query>sourcetype="web_ping" `website_monitoring_search_index`
+| stats count as events range(_time) as span latest(_time) as last_event latest(title) as title by source host
+| eval usual_gap=if(events &gt; 1, span / (events - 1), null())
+| eval stale=case(isnull(usual_gap), "unknown", now() - last_event &gt; 2 * usual_gap, "yes", true(), "no")
+| eval usual_interval=round(usual_gap, 0)
+| eval rank=case(stale=="yes", 0, stale=="unknown", 1, true(), 2)
+| sort 0 rank source
+| `timesince(last_event,last_event)`
+| table source title host stale last_event usual_interval events</query>
+          <refresh>1m</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">false</option>
+        <option name="drilldown">none</option>
+        <format type="color" field="stale">
+          <colorPalette type="map">{"yes":#F8BE34}</colorPalette>
+        </format>
+        <format type="number" field="usual_interval">
+          <option name="precision">0</option>
+          <option name="unit">s</option>
+        </format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Runner starts and stops</title>
+        <search>
+          <query><![CDATA[index=_internal sourcetype="website_ping:log" host=$host|s$ stanza="(process)" (message="starting stanzas=*" OR message="stopped reason=*")
+| rex field=message "^starting stanzas=(?<stanzas>\d+) invalid=(?<invalid>\d+) thread_limit=(?<thread_limit>\d+) pid=(?<pid>\d+) python=(?<python>\S+) openssl=\"(?<openssl>[^\"]*)\""
+| rex field=message "^stopped reason=(?<reason>.+?) pid=(?<stopped_pid>\d+) abandoned=(?<abandoned>\d+)"
+| eval what=if(isnotnull(reason), "stopped", "started"), pid=coalesce(pid, stopped_pid)
+| sort 0 -_time
+| table _time host what pid reason abandoned stanzas invalid thread_limit version python openssl]]></query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>
