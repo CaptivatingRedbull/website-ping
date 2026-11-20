@@ -26,7 +26,13 @@ from wptest.stack import (
     render,
     write_env_file,
 )
-from wptest.versions import ALL_RUNTIMES, LINES, Runtime, select_runtimes
+from wptest.versions import (
+    ALL_RUNTIMES,
+    LINES,
+    Runtime,
+    select_runtimes,
+    version_key,
+)
 from wptest.wait import HEALTHY, INSTALL, PROBE, STARTED, Stages, wait_for
 
 TERMS_VAR = "WPTEST_ACCEPT_SPLUNK_TERMS"
@@ -621,7 +627,10 @@ def harness(
         )
     lock = _take_lock()
     workdir = tmp_path_factory.mktemp("preflight")
-    lines = sorted({runtime.line for runtime in selected_runtimes(request.config)})
+    lines = sorted(
+        {runtime.line for runtime in selected_runtimes(request.config)},
+        key=version_key,
+    )
     violations = run_preflight(lines, workdir)
     if violations:
         pytest.exit(

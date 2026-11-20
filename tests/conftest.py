@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from wptest.versions import ALL, EDGES, LINES, chosen_lines, edge_lines
 
 INTEGRATION_PATH = "tests/integration"
 
@@ -35,16 +36,16 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group = parser.getgroup("website-ping integration")
     group.addoption(
         "--splunk-line",
-        choices=("9.4", "10.6", "all"),
-        default="all",
-        help="Splunk version line to test (default: all)",
+        default=EDGES,
+        help=f"Splunk version lines to test: {', '.join(LINES)} (comma-separated),"
+        f" {EDGES} ({' and '.join(edge_lines())}, default) or {ALL}",
     )
     group.addoption(
         "--python",
-        choices=("3.9", "3.13", "all"),
+        choices=("3.9", "3.13", ALL),
         default=None,
-        help="interpreter on lines that ship several (10.6): 3.9, 3.13 or all;"
-        " default: the one the app selects (3.13). 9.4 always runs 3.9",
+        help="interpreter on lines that ship several: 3.9, 3.13 or all;"
+        " default: the one the app selects. A line that ships one always runs it",
     )
     group.addoption(
         "--keep",
@@ -56,6 +57,14 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store_true",
         help="golden capture: write tests/golden/<version>/ instead of comparing",
     )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Refuse an unknown --splunk-line before collection, as argparse choices would."""
+    try:
+        _ = chosen_lines(str(config.getoption("--splunk-line")))
+    except ValueError as exc:
+        raise pytest.UsageError(str(exc)) from exc
 
 
 @pytest.fixture(scope="session")

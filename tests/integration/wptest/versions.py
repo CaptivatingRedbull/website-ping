@@ -18,7 +18,7 @@ class SplunkLine:
     licence_env: Mapping[str, str]
     pythons: tuple[str, ...]
     """Interpreters the line ships. The first is the one the app's own
-    python.required selects; the others need an override in the config app."""
+    inputs.conf selects; the others need an override in the config app."""
 
     @property
     def pinned_image(self) -> str:
@@ -39,6 +39,21 @@ LINES: dict[str, SplunkLine] = {
         pythons=("3.13", "3.9"),
     ),
 }
+"""Every supported Splunk Enterprise line, oldest first."""
+
+EDGES = "edges"
+ALL = "all"
+
+
+def version_key(version: str) -> tuple[int, ...]:
+    """Sort key for a dotted version such as 10.6 or 3.13."""
+    return tuple(int(part) for part in version.split("."))
+
+
+def edge_lines(lines: Mapping[str, SplunkLine] = LINES) -> tuple[str, ...]:
+    """The oldest and the newest line: what a run covers without --splunk-line."""
+    names = list(lines)
+    return tuple(dict.fromkeys((names[0], names[-1])))
 
 
 @dataclass(frozen=True)
@@ -68,20 +83,42 @@ ALL_RUNTIMES: tuple[Runtime, ...] = tuple(
 )
 
 
-def select_runtimes(line_choice: str, python_choice: str | None) -> list[Runtime]:
-    """The runtimes for --splunk-line and --python, in ALL_RUNTIMES order.
+def chosen_lines(
+    line_choice: str, lines: Mapping[str, SplunkLine] = LINES
+) -> tuple[str, ...]:
+    """The lines --splunk-line names: one line, a comma-separated list of lines,
+    "edges" (the oldest and the newest) or "all". An unknown line is an error."""
+    chosen: set[str] = set()
+    for part in (p.strip() for p in line_choice.split(",")):
+        if part == ALL:
+            chosen.update(lines)
+        elif part == EDGES:
+            chosen.update(edge_lines(lines))
+        elif part in lines:
+            chosen.add(part)
+        else:
+            known = ", ".join([*lines, EDGES, ALL])
+            raise ValueError(f"unknown Splunk line {part!r}; known: {known}")
+    return tuple(line for line in lines if line in chosen)
+
+
+def select_runtimes(
+    line_choice: str,
+    python_choice: str | None,
+    lines: Mapping[str, SplunkLine] = LINES,
+) -> list[Runtime]:
+    """The runtimes for --splunk-line and --python, in line order.
 
     A line that ships one interpreter always runs it. On a line with several,
     no choice means the one the app selects itself, "all" means every one, and a
     version means that one; a version the line does not ship is an error.
     """
     selected: list[Runtime] = []
-    for line, spec in LINES.items():
-        if line_choice not in ("all", line):
-            continue
+    for line in chosen_lines(line_choice, lines):
+        spec = lines[line]
         if len(spec.pythons) == 1 or python_choice is None:
             pythons = spec.pythons[:1]
-        elif python_choice == "all":
+        elif python_choice == ALL:
             pythons = spec.pythons
         elif python_choice in spec.pythons:
             pythons = (python_choice,)

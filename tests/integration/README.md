@@ -34,8 +34,8 @@ any container starts.
 
 ```sh
 export WPTEST_ACCEPT_SPLUNK_TERMS=yes
-pytest tests/integration -m "single or network or parity"   # standalone and parity stacks, 9.4/3.9 and 10.6/3.13
-pytest tests/integration -m "single or network or parity" --python all   # adds 10.6/3.9 (release)
+pytest tests/integration -m "single or network or parity"   # standalone and parity stacks, oldest and newest line
+pytest tests/integration -m "single or network or parity" --splunk-line all --python all   # every runtime (release)
 pytest tests/integration -m parity                 # parity stack only
 pytest tests/integration -m no_route               # no-route stack
 pytest tests/integration -m distributed            # distributed stack
@@ -47,7 +47,9 @@ pytest tests/integration                           # everything, one stack at a 
 
 Options:
 
-* `--splunk-line 9.4`, `--splunk-line 10.6` or `--splunk-line all` (default).
+* `--splunk-line` takes a line (`9.4`, `10.6`), a comma-separated list of
+  lines (`--splunk-line 9.4,10.6`), `edges` (default: the oldest and the newest
+  line) or `all`. An unknown line stops the session before collection.
 * `--keep` keeps the first failing stack running and stops the session. A
   parity run that includes `test_view_searches.py` keeps its stack even when
   nothing fails, so the views can be opened in Splunk Web: `docker port
@@ -55,9 +57,9 @@ Options:
   `tests/integration/.evidence/<run>/password`, readable only by you. Remove
   kept stacks with `scripts/test-clean.sh`.
 * `--python 3.9`, `--python 3.13` or `--python all` picks the interpreter on
-  10.6. Without it, 10.6 runs 3.13, which the app's own `python.required`
-  selects. For 3.9 the config app gets `local/inputs.conf` with
-  `[web_ping] python.required = 3.9`. 9.4 always runs 3.9. The probe
+  lines that ship several (10.6). Without it, such a line runs 3.13, which the
+  app's own `python.required` selects. For 3.9 the config app gets
+  `local/inputs.conf` with `[web_ping] python.required = 3.9`. 9.4 always runs 3.9. The probe
   (`spike`) and Website Monitoring 2.9.7 (`golden`) choose their own
   interpreter, so they run only on each line's default. Test ids and stack
   names carry the runtime, for example `[10.6-py3.9]` and
