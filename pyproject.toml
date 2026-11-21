@@ -9,7 +9,8 @@ markers = [
     "release: checks required only for a release",
     "spike: throwaway probes only run when -m names spike",
     "golden: capture Website Monitoring 2.9.7 events; only run when -m names golden",
-        "parity: website-ping events compared with the golden fixtures of Website Monitoring 2.9.7",
+    "parity: website-ping events compared with the golden fixtures of Website Monitoring 2.9.7",
+    "migration: migrate from Website Monitoring 2.9.7 by docs/migration.md; only run when -m names migration",
 ]
 
 [tool.coverage.run]

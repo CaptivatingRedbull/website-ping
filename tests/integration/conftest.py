@@ -13,7 +13,15 @@ from urllib.parse import urlparse
 
 import pytest
 from wptest import evidence as evidence_module
-from wptest import host_snapshot, install, legacy, parity, preflight
+from wptest import (
+    host_snapshot,
+    install,
+    legacy,
+    migration,
+    migration_steps,
+    parity,
+    preflight,
+)
 from wptest.certs import SPLUNK_CERT_DIR, Certificates, generate
 from wptest.evidence import Evidence
 from wptest.install import APPS_DIR, Package
@@ -48,9 +56,18 @@ TOPOLOGY_OF_MARKER = {
     "spike": "spike",
     "golden": "golden",
     "parity": "parity",
+    "migration": "migration",
 }
-TOPOLOGY_ORDER = ("standalone", "parity", "noroute", "spike", "golden", "distributed")
-OPT_IN_MARKERS = ("spike", "golden")
+TOPOLOGY_ORDER = (
+    "standalone",
+    "parity",
+    "noroute",
+    "spike",
+    "golden",
+    "migration",
+    "distributed",
+)
+OPT_IN_MARKERS = ("spike", "golden", "migration")
 OWN_INTERPRETER_MARKERS = ("spike", "golden")
 """Tests of apps that are not website-ping and choose their interpreter themselves."""
 MANAGER_KEY = pytest.StashKey["StackManager"]()
@@ -147,7 +164,11 @@ def stanza_hosts() -> list[str]:
             host = urlparse(parser.get(section, "url", fallback="")).hostname
             if host:
                 hosts.append(host)
-    for scenario in parity.PARITY_SCENARIOS:
+    scenarios = [
+        *parity.PARITY_SCENARIOS,
+        *(item.scenario for item in migration.LEGACY_INPUTS),
+    ]
+    for scenario in scenarios:
         host = urlparse(scenario.url).hostname
         if host:
             hosts.append(host)
@@ -585,6 +606,35 @@ def setup_parity(stack: Stack, manager: StackManager) -> None:
     )
 
 
+def setup_migration(stack: Stack, manager: StackManager) -> None:
+    """Standalone compose file. On the line Website Monitoring 2.9.7 installs on:
+    the old app with its configuration and the guide's changes. On the other
+    lines: a fresh host with the old app's files to copy. Then the migration by
+    the guide's steps."""
+    _start(stack, manager)
+    _deliver_helpers(stack, manager, ("so1",))
+    _probe(stack, manager, ("so1",))
+    workdir = manager.workdir / stack.project
+    if stack.runtime.line == legacy.LEGACY_LINE:
+        state = migration_steps.set_up_legacy(stack, workdir)
+    else:
+        state = migration_steps.set_up_new_host(
+            stack, workdir, install.python_override(stack.runtime)
+        )
+    stack.facts["migration"] = state
+    migration_steps.migrate(stack, state, manager.package, workdir)
+    stack.mark = state.started_at
+    stack.stages.reached(INSTALL)
+    _ = wait_for(
+        STARTED,
+        lambda: migration_steps.events_from(
+            stack, state.started_at, migration_steps.quick_stanzas()
+        ),
+        EVENT_TIMEOUT,
+        stack.stages,
+    )
+
+
 SETUPS: dict[str, Callable[[Stack, StackManager], None]] = {
     "standalone": setup_standalone,
     "noroute": setup_noroute,
@@ -592,6 +642,7 @@ SETUPS: dict[str, Callable[[Stack, StackManager], None]] = {
     "spike": setup_spike,
     "golden": setup_golden,
     "parity": setup_parity,
+    "migration": setup_migration,
 }
 
 
@@ -727,6 +778,11 @@ def golden_stack(stacks: StackManager, runtime: Runtime) -> Stack:
 @pytest.fixture
 def parity_stack(stacks: StackManager, runtime: Runtime) -> Stack:
     return stacks.get(runtime, "parity")
+
+
+@pytest.fixture
+def migration_stack(stacks: StackManager, runtime: Runtime) -> Stack:
+    return stacks.get(runtime, "migration")
 
 
 @pytest.fixture

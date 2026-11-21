@@ -25,6 +25,7 @@ COMPOSE_FILES = {
     "spike": COMPOSE_DIR / "standalone.yml",
     "golden": COMPOSE_DIR / "standalone.yml",
     "parity": COMPOSE_DIR / "standalone.yml",
+    "migration": COMPOSE_DIR / "standalone.yml",
 }
 SPLUNK_SERVICES = {
     "standalone": ("so1",),
@@ -33,6 +34,7 @@ SPLUNK_SERVICES = {
     "spike": ("so1",),
     "golden": ("so1",),
     "parity": ("so1",),
+    "migration": ("so1",),
 }
 HOST_PORTS = (8000, 8088, 8089, 9997)
 SPLUNK = "/opt/splunk/bin/splunk"

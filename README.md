@@ -516,7 +516,10 @@ python3 -m venv .venv
 
 The integration tests run every supported Splunk Enterprise line from 9.4 to
 10.6 in Docker (by default the oldest and the newest); see
-[tests/integration/README.md](tests/integration/README.md).
+[tests/integration/README.md](tests/integration/README.md). One of them
+migrates a Website Monitoring 2.9.7 installation by
+[docs/migration.md](docs/migration.md), the guide's commands and file tables
+included, and rolls it back.
 
 ## License
 

@@ -43,6 +43,7 @@ pytest tests/integration -m distributed            # distributed stack
 pytest tests/integration -m release                # AppInspect on the tarball
 pytest tests/integration -m spike --splunk-line 9.4 -k standalone --keep
 pytest tests/integration -m golden --splunk-line 9.4 --golden-write    
+pytest tests/integration -m migration --splunk-line all --python all   # migration from Website Monitoring 2.9.7 (release)
 pytest tests/integration                           # everything, one stack at a time
 ```
 
@@ -86,6 +87,23 @@ with the fixture as well (`golden.compare_requests`, allowed differences in
 `REQUEST_ALLOWED`): header names and order, the authentication scheme of each
 request and the client certificate's name, so the number of requests per check
 must equal 2.9.7's.
+
+The migration stack (`-m migration`, run only when `-m` names it) follows
+`docs/migration.md`. On 9.4 it installs Website Monitoring 2.9.7 with the
+configuration of `wptest/migration.py` and
+`migration/website_monitoring_local/` (plain-text passwords, a user name and
+password in a URL, overridden macros, eventtype and alert, a saved search of
+its own, an input in the `search` app), applies "Changes to make before the
+migration", and migrates with the guide's own shell blocks. Which files are
+copied is read from the guide's tables under "Files to copy". The tests check
+the old app's checkpoints carried over, events against the golden fixtures,
+the copied overrides, the alert and its Log Event action, every view search,
+the alert `Website Ping Runner Silent` after `kill -STOP` of the runner, and the
+guide's rollback. On the other lines 2.9.7 does not install: a fresh stack gets
+the same files in the place of the guide's backup, the passwords are stored
+again, and the same tests run without the checkpoint, rollback and 2.9.7 ones.
+The `kill -STOP` test runs on 9.4 and on 10.6 with 3.13 only. The migration
+stack takes about 18 minutes on 9.4, 11 of them for the `kill -STOP` test.
 
 The parity stack stores every password in `storage/passwords` (in the `search`
 app) before the inputs start; its generated `inputs.conf` and
