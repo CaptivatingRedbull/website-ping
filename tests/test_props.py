@@ -26,23 +26,23 @@ def read_props() -> dict[str, dict[str, str]]:
 def test_props_set_the_event_time_and_the_log_fields_and_nothing_else() -> None:
     """Splunk reads a date from the text of unbroken events even when the input
     writes <time>; DATETIME_CONFIG = NONE stops that for check and body events.
-    Line breaking and search-time extraction of events stay as in Website
-    Monitoring. The log file gets one sourcetype and its search-time fields."""
+    It is bound to the source of the app's own inputs, so the sourcetypes
+    web_ping and web_ping:response get no props and data of other apps is not
+    affected. Line breaking and search-time extraction of events stay as in
+    Website Monitoring. The log file gets one sourcetype and its search-time
+    fields."""
     props = read_props()
     assert set(props) == {
-        "web_ping",
-        "web_ping:response",
+        "source::web_ping://...",
         "source::...website_ping.log*",
         LOG_SOURCETYPE,
     }
-    assert props["web_ping"] == {"DATETIME_CONFIG": "NONE"}
-    assert props["web_ping:response"] == {"DATETIME_CONFIG": "NONE"}
+    assert props["source::web_ping://..."] == {"DATETIME_CONFIG": "NONE"}
     assert props["source::...website_ping.log*"] == {"sourcetype": LOG_SOURCETYPE}
     assert set(props[LOG_SOURCETYPE]) == {"KV_MODE", "EXTRACT-line", "EVAL-stanza"}
     assert props[LOG_SOURCETYPE]["KV_MODE"] == "none"
     assert props[LOG_SOURCETYPE]["EVAL-stanza"] == (
-        'coalesce(stanza_plain, replace(stanza_quoted, "\\\\\\\\(.)", "\\1"),'
-        ' "(process)")'
+        'coalesce(stanza_plain, replace(stanza_quoted, "\\\\\\\\(.)", "\\1"), "(process)")'
     )
 
 

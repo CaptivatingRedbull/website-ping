@@ -6,7 +6,15 @@ All notable changes to Website Ping are listed here. The format follows
 change behaviour.
  
 ## [Unreleased]
- 
+
+### Fixed
+
+- `DATETIME_CONFIG = NONE` now applies only to events of the app's own inputs
+  (`[source::web_ping://...]`). It was set on the sourcetypes `web_ping` and
+  `web_ping:response`, which also changed the event time of other data with those
+  sourcetypes on the instance, for example Website Monitoring's. Inputs that set
+  their own `sourcetype` now get it as well.
+
 ## [0.1.0] - 2026-11-23
  
 First public release. Website Ping replaces Website Monitoring 2.9.7 by Luke

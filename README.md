@@ -373,8 +373,9 @@ sourcetype), with the check event's source, host, index and time. It holds the
 first `max_response_body_length` characters (`[default]` of
 `website_monitoring.conf`, default 1000, -1 for the whole body, 0 for none). A
 multi-line body stays one event, and its time is the time of the check even when
-the page contains a date (the app ships `DATETIME_CONFIG = NONE` for the
-sourcetype). Characters that XML does not allow, such as control characters in a
+the page contains a date (the app ships `DATETIME_CONFIG = NONE` for the source of
+its inputs, `web_ping://...`; other events of the sourcetype are not affected).
+Characters that XML does not allow, such as control characters in a
 binary body, are removed; an empty body gives no body event. See "Data
 protection" before turning it on.
 
