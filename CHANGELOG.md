@@ -7,6 +7,16 @@ change behaviour.
  
 ## [Unreleased]
 
+### Added
+
+- Side-by-side build (`scripts/package.py --flavor side-by-side`): the same app
+  with its own input `website_ping`, defaults stanza `[website_ping]` and settings
+  file `website_ping.conf`, and with no object shared with other apps, so it runs
+  on an instance where Website Monitoring stays installed. Releases include both
+  packages. See [docs/side-by-side.md](docs/side-by-side.md).
+- The start line in `website_ping.log` names the build (`flavor=drop-in` or
+  `flavor=side-by-side`).
+
 ### Fixed
 
 - `DATETIME_CONFIG = NONE` now applies only to events of the app's own inputs

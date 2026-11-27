@@ -21,7 +21,8 @@ Monitoring, follow [docs/migration.md](docs/migration.md).
 * Splunk's own Python: 3.9 on 9.4 and 10.0, 3.13 on 10.2 and later (see
   "Python"). The app uses the standard library only.
 * Website Monitoring must not be installed on the same instance: both apps
-  provide the input `web_ping`.
+  provide the input `web_ping`. To try Website Ping next to it first, use the
+  side-by-side build ([docs/side-by-side.md](docs/side-by-side.md)).
 
 ## Install
 
@@ -32,6 +33,11 @@ python3 scripts/package.py      # writes dist/website_ping-<version>.tar.gz
 $SPLUNK_HOME/bin/splunk install app dist/website_ping-<version>.tar.gz
 $SPLUNK_HOME/bin/splunk restart
 ```
+
+`python3 scripts/package.py --flavor side-by-side` builds the side-by-side
+package instead, which runs next to Website Monitoring under other names (see
+[docs/side-by-side.md](docs/side-by-side.md)). This README describes the drop-in
+build.
 
 With a deployment server, unpack the package into
 `$SPLUNK_HOME/etc/deployment-apps/` and give its server class
@@ -520,7 +526,8 @@ The integration tests run every supported Splunk Enterprise line from 9.4 to
 [tests/integration/README.md](tests/integration/README.md). One of them
 migrates a Website Monitoring 2.9.7 installation by
 [docs/migration.md](docs/migration.md), the guide's commands and file tables
-included, and rolls it back.
+included, and rolls it back. Another installs the side-by-side build next to
+Website Monitoring 2.9.7 and checks that neither app affects the other.
 
 ## License
 
