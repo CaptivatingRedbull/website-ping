@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from logger import StanzaLogger
 from ping_config import DEFAULT_SSL_VERIFY, Settings
+from wp_names import CONF_FILE
 from wp_proxy import proxy_warnings
 from wp_splunk import (
     BUILTIN,
@@ -104,7 +105,8 @@ class ConfigContexts:
         if refusal is not None:
             if self._first("refused", stanza, snapshot.generation):
                 log.error(
-                    "website_monitoring.conf stanza %s cannot be used, not run: %s",
+                    "%s stanza %s cannot be used, not run: %s",
+                    CONF_FILE,
                     name,
                     refusal,
                 )
@@ -114,8 +116,8 @@ class ConfigContexts:
             if stanza not in self._warned_unknown:
                 self._warned_unknown.add(stanza)
                 log.warning(
-                    "website_monitoring.conf has no stanza %s;"
-                    " using the built-in values (no proxy)",
+                    "%s has no stanza %s; using the built-in values (no proxy)",
+                    CONF_FILE,
                     name,
                 )
             configuration = BUILTIN
@@ -138,7 +140,7 @@ class ConfigContexts:
         for warning in proxy_warnings(configuration.proxy, proxy_password):
             if (stanza, warning) not in self._warned_proxy:
                 self._warned_proxy.add((stanza, warning))
-                log.warning("website_monitoring.conf stanza %s: %s", name, warning)
+                log.warning("%s stanza %s: %s", CONF_FILE, name, warning)
         return make_context(
             settings,
             configuration,

@@ -51,13 +51,14 @@ def test_stderr_error_has_version_but_info_does_not(
     assert " v=" in lines[1]
 
 
-def test_runtime_versions_name_interpreter_and_openssl() -> None:
+def test_runtime_versions_name_interpreter_openssl_and_flavor() -> None:
     match = re.fullmatch(
-        r'python=(\d+\.\d+\.\d+) openssl="([^"]+)"', runtime_versions()
+        r'python=(\d+\.\d+\.\d+) openssl="([^"]+)" flavor=(\S+)', runtime_versions()
     )
     assert match is not None
     assert match.group(1) == platform.python_version()
     assert match.group(2) == ssl.OPENSSL_VERSION
+    assert match.group(3) == "drop-in"
 
 
 def test_start_line_carries_runtime_versions(

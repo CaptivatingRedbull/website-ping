@@ -5,6 +5,8 @@ import platform
 import ssl
 from pathlib import Path
 
+from wp_names import FLAVOR
+
 APP_CONF = Path(__file__).absolute().parent.parent / "default" / "app.conf"
 
 
@@ -24,9 +26,13 @@ APP_VERSION = read_app_version()
 
 
 def runtime_versions() -> str:
-    """Interpreter and OpenSSL versions as log fields.
+    """Interpreter and OpenSSL versions and the build flavor as log fields.
 
     Splunk picks the interpreter from python.required, so the log is the only place
-    that shows which one runs: python=3.13.11 openssl="OpenSSL 3.5.9 29 Sep 2026".
+    that shows which one runs: python=3.13.11 openssl="OpenSSL 3.5.9 29 Sep 2026"
+    flavor=drop-in.
     """
-    return f'python={platform.python_version()} openssl="{ssl.OPENSSL_VERSION}"'
+    return (
+        f'python={platform.python_version()} openssl="{ssl.OPENSSL_VERSION}"'
+        f" flavor={FLAVOR}"
+    )

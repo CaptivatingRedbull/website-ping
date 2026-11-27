@@ -27,9 +27,10 @@ from ping_config import (
     ConfigError,
     parse_bool,
 )
+from wp_names import APP_ID, CONF_FILE, CONF_NAME
 
-CONF_PATH = "/servicesNS/nobody/website_ping/configs/conf-website_monitoring"
-"""All stanzas of website_monitoring.conf as the website_ping app sees them: its own
+CONF_PATH = f"/servicesNS/nobody/{APP_ID}/configs/conf-{CONF_NAME}"
+"""All stanzas of the app's conf file (wp_names.CONF_FILE) as the website_ping app sees them: its own
 default/ and local/, plus files of other apps that export them."""
 PASSWORDS_PATH = "/services/storage/passwords"
 """Every entry the session key can read, in any app, as Website Monitoring read them.
@@ -51,7 +52,7 @@ MAX_ERROR_LENGTH = 200
 SOCKS_PROXY_TYPES = frozenset({"socks4", "socks5"})
 SOCKS_REFUSED = "proxy_type = {proxy_type} is not supported, only HTTP proxies are"
 PROXY_PASSWORD_REFUSED = (
-    "proxy_password in website_monitoring.conf is not supported; store it in"
+    f"proxy_password in {CONF_FILE} is not supported; store it in"
     f" storage/passwords, realm {PROXY_REALM}, user {PROXY_USERNAME}"
 )
 
@@ -316,7 +317,7 @@ def build_app_config(
         notices.append(
             Notice(
                 logging.WARNING,
-                f"stanza [{DEFAULTS_STANZA}] is missing from website_monitoring.conf,"
+                f"stanza [{DEFAULTS_STANZA}] is missing from {CONF_FILE},"
                 " so [default] cannot be read; using the built-in values",
             )
         )
@@ -463,7 +464,7 @@ class ConfigCache:
             )
         self._failures = 0
         for notice in notices:
-            self._log.log(notice.level, "website_monitoring.conf: %s", notice.message)
+            self._log.log(notice.level, "%s: %s", CONF_FILE, notice.message)
         self._log.debug(
             "configuration loaded generation=%d configurations=%d refused=%d stored_passwords=%d",
             generation,

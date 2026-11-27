@@ -14,6 +14,7 @@ from ping_events import write_event
 from wp_context import CheckContext, ConfigContexts
 from wp_deadline import Phases
 from wp_event_fields import check_events
+from wp_names import CONF_FILE
 from wp_runner import STOP_WAIT, Checkpoints, Runner, read_input_config
 from wp_splunk import DEFAULT_THREAD_LIMIT, ConfigCache, RestClient, SplunkdClient
 from wp_version import runtime_versions
@@ -24,7 +25,7 @@ SCHEME_ARGS: tuple[tuple[str, str, str], ...] = (
      "How often to check: a number with an optional unit, such as 30s, 15m, 2h, 1d"),
     ("title", "Title", "A short description of the site; defaults to the URL"),
     ("configuration", "Configuration",
-     "Stanza of website_monitoring.conf to use; defaults to default"),
+     f"Stanza of {CONF_FILE} to use; defaults to default"),
     ("client_certificate", "Client certificate", "Path to a client certificate"),
     ("client_certificate_key", "Client certificate key",
      "Path to the client certificate key, if it is not in the certificate file"),
@@ -137,7 +138,8 @@ def build_runner(xml_text: str, client: SplunkdClient | None = None) -> Runner:
         # The thread pool is sized once; a later load cannot change it.
         thread_limit = DEFAULT_THREAD_LIMIT
         process_log.error(
-            "thread_limit of website_monitoring.conf not known, using %d until the input restarts",
+            "thread_limit of %s not known, using %d until the input restarts",
+            CONF_FILE,
             thread_limit,
         )
     else:
