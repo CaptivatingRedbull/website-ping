@@ -7,6 +7,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
+from wptest import flavor
+
 SOURCETYPE = "web_ping"
 INDEX = "main"
 TIME_SLACK = 60.0
@@ -120,7 +122,7 @@ def compare(
 
     expect("sourcetype", SOURCETYPE)
     expect("index", INDEX)
-    expect("source", f"web_ping://{scenario.title}")
+    expect("source", flavor.current().stanza(scenario.title))
     expect("host", host)
     expect("title", scenario.title)
     expect("url", scenario.url)

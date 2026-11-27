@@ -1,4 +1,4 @@
-"""AppInspect on the built tarball, run once per release."""
+"""AppInspect on both built tarballs (drop-in and side-by-side), run once per release."""
 
 from __future__ import annotations
 
@@ -9,16 +9,19 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from wptest import flavor, install
 from wptest.evidence import Evidence
-from wptest.install import Package
 
 pytestmark = pytest.mark.release
 
 APPINSPECT = Path(sys.executable).parent / "splunk-appinspect"
 
 
-def test_appinspect_precert(package: Package, evidence: Evidence) -> None:
-    report = evidence.folder / "appinspect.json"
+@pytest.mark.parametrize("name", sorted(flavor.FLAVORS))
+def test_appinspect_precert(name: str, evidence: Evidence) -> None:
+    package = install.build_package(name)
+    evidence.note(f"appinspect_{name}_tarball_sha256", package.sha256)
+    report = evidence.folder / f"appinspect-{name}.json"
     result = subprocess.run(
         [
             str(APPINSPECT), "inspect", str(package.path),
@@ -29,11 +32,13 @@ def test_appinspect_precert(package: Package, evidence: Evidence) -> None:
         text=True,
         timeout=1200,
     )  # fmt: skip
-    (evidence.folder / "appinspect.log").write_text(result.stdout + result.stderr)
+    (evidence.folder / f"appinspect-{name}.log").write_text(
+        result.stdout + result.stderr
+    )
     assert report.exists(), (
         f"no report, exit {result.returncode}: {result.stderr[-2000:]}"
     )
     summary = cast("dict[str, int]", json.loads(report.read_text())["summary"])
-    evidence.note("appinspect_summary", summary)
+    evidence.note(f"appinspect_{name}_summary", summary)
     assert summary.get("failure", 0) == 0, summary
     assert summary.get("error", 0) == 0, summary

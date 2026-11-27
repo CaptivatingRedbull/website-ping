@@ -15,7 +15,7 @@ import re
 import time
 
 import pytest
-from wptest import install
+from wptest import flavor, install
 from wptest.evidence import Evidence
 from wptest.install import (
     APPS_DIR,
@@ -26,7 +26,7 @@ from wptest.install import (
     Package,
 )
 from wptest.splunk_rest import Searcher, error_lines_query, events_query
-from wptest.stack import CHECKPOINT_DIR, SPLUNK, Stack
+from wptest.stack import SPLUNK, Stack
 from wptest.versions import Runtime
 from wptest.wait import INDEXED, wait_for
 
@@ -41,22 +41,36 @@ INVALID_STANZAS = {
     "bad-config": "url must use http or https",
     "no-interval": "interval is required",
     "proxy-socks": (
-        "website_monitoring.conf stanza socks cannot be used, not run:"
+        "{conf_file} stanza socks cannot be used, not run:"
         " proxy_type = socks5 is not supported, only HTTP proxies are"
     ),
     "password-plain-rejected": (
         "password in inputs.conf is not supported; store it in storage/passwords"
-        " with realm web_ping://password-plain-rejected"
+        " with realm {scheme}://password-plain-rejected"
     ),
 }
+"""The ERROR line of each stanza that does not run; {conf_file} and {scheme} are
+the names of the build under test (expected_error)."""
 SETUP_ERROR_STANZAS = {
     "tls-bad-ca-path": "TLS setup failed: ca_certs not readable",
 }
 """Stanzas that run, but log one ERROR line per process about their settings."""
 
 
+def expected_error(name: str) -> str:
+    under_test = flavor.current()
+    return INVALID_STANZAS[name].format(
+        conf_file=under_test.conf_file, scheme=under_test.scheme
+    )
+
+
+def stanza_filter(name: str = "") -> str:
+    """Search clause for the log lines of a stanza (or, without a name, of any)."""
+    return f'"stanza={flavor.current().stanza(name)}"'
+
+
 def standalone_stanzas() -> dict[str, dict[str, str]]:
-    """The stanzas of the standalone config app, by name without web_ping://."""
+    """The stanzas of the standalone config app, by name without the scheme."""
     parser = configparser.ConfigParser(
         interpolation=None, strict=False, delimiters=("=",)
     )
@@ -100,7 +114,8 @@ def test_install_verified(standalone: Stack, package: Package) -> None:
 
 
 def test_btool_shows_app_defaults(standalone: Stack) -> None:
-    output = standalone.exec("so1", f"{SPLUNK} btool inputs list web_ping --debug\n")
+    scheme = flavor.current().scheme
+    output = standalone.exec("so1", f"{SPLUNK} btool inputs list {scheme} --debug\n")
     from_app = {
         line.split(None, 1)[1].strip()
         for line in output.splitlines()
@@ -113,17 +128,14 @@ def test_btool_shows_app_defaults(standalone: Stack) -> None:
         assert not any(line.startswith(f"{key} ") for line in from_app), output
 
 
-def test_btool_check_accepts_website_monitoring_conf(standalone: Stack) -> None:
+def test_btool_check_accepts_the_conf_file(standalone: Stack) -> None:
     """btool check reads the shipped file and the test app's copy and reports
     nothing for them: the spec declares every key."""
+    conf_file = flavor.current().conf_file
     output = standalone.exec("so1", f"{SPLUNK} btool check --debug 2>&1 || true\n")
-    lines = {
-        line.strip()
-        for line in output.splitlines()
-        if "website_monitoring.conf" in line
-    }
+    lines = {line.strip() for line in output.splitlines() if conf_file in line}
     assert lines == {
-        f"Checking: /opt/splunk/etc/apps/{app}/default/website_monitoring.conf"
+        f"Checking: /opt/splunk/etc/apps/{app}/default/{conf_file}"
         for app in (install.APP, CONFIG_APP)
     }, output
 
@@ -149,14 +161,16 @@ def test_interpreter(standalone: Stack, runtime: Runtime, evidence: Evidence) ->
     raw = rows[0]["_raw"]
     evidence.note(f"{standalone.project}.start_line", raw)
     assert rows[0]["sourcetype"] == "website_ping:log", rows[0]
-    match = re.search(r' python=(\S+) openssl="[^"]+"', raw)
+    match = re.search(r' python=(\S+) openssl="[^"]+" flavor=(\S+)', raw)
     assert match is not None, raw
     assert match.group(1).startswith(f"{runtime.python}."), raw
+    assert match.group(2) == flavor.current().name, raw
 
 
-def test_thread_limit_from_website_monitoring_conf(standalone: Stack) -> None:
-    """[default] of the config app's exported website_monitoring.conf reaches the
-    input through website_ping's [wp_defaults]."""
+def test_thread_limit_from_the_conf_file(standalone: Stack) -> None:
+    """[default] of the config app's exported conf file (website_monitoring.conf,
+    or website_ping.conf in the side-by-side build) reaches the input through
+    website_ping's [wp_defaults]."""
     searcher = standalone.searcher("so1")
     rows = wait_for(
         "start line",
@@ -169,7 +183,7 @@ def test_thread_limit_from_website_monitoring_conf(standalone: Stack) -> None:
 
 def test_stored_password_is_found_and_never_logged(standalone: Stack) -> None:
     searcher = standalone.searcher("so1")
-    stanza = f"web_ping://{STORED_PASSWORD_STANZA}"
+    stanza = flavor.current().stanza(STORED_PASSWORD_STANZA)
     _ = wait_for(
         "password found line",
         lambda: (
@@ -197,17 +211,14 @@ def test_invalid_stanza_logs_error_and_writes_no_event(
     errors = wait_for(
         f"{name} ERROR line",
         lambda: (
-            searcher.search(
-                errors_query(standalone.mark, f'"stanza=web_ping://{name}"')
-            )
-            or None
+            searcher.search(errors_query(standalone.mark, stanza_filter(name))) or None
         ),
         EVENT_TIMEOUT,
         standalone.stages,
     )
-    assert INVALID_STANZAS[name] in errors[0]["_raw"], errors
+    assert expected_error(name) in errors[0]["_raw"], errors
     events = searcher.search(
-        f'search index=main sourcetype=web_ping source="web_ping://{name}"'
+        f'search index=main sourcetype=web_ping source="{flavor.current().stanza(name)}"'
         f" _index_earliest={int(standalone.mark)}"
     )
     assert events == []
@@ -220,10 +231,7 @@ def test_plain_password_is_never_logged(standalone: Stack) -> None:
     _ = wait_for(
         f"{name} ERROR line",
         lambda: (
-            searcher.search(
-                errors_query(standalone.mark, f'"stanza=web_ping://{name}"')
-            )
-            or None
+            searcher.search(errors_query(standalone.mark, stanza_filter(name))) or None
         ),
         EVENT_TIMEOUT,
         standalone.stages,
@@ -236,9 +244,9 @@ def test_plain_password_is_never_logged(standalone: Stack) -> None:
 
 def test_one_process_runs_every_valid_stanza(standalone: Stack) -> None:
     pids = standalone.input_pids("so1")
-    assert len(pids) == 1, f"web_ping.py processes: {pids}"
+    assert len(pids) == 1, f"{flavor.current().script} processes: {pids}"
     expected = {
-        f"web_ping://{name}"
+        flavor.current().stanza(name)
         for name in standalone_stanzas()
         if name not in INVALID_STANZAS
     }
@@ -320,10 +328,7 @@ def test_setup_error_is_logged_once(standalone: Stack, name: str) -> None:
     errors = wait_for(
         f"{name} ERROR line",
         lambda: (
-            searcher.search(
-                errors_query(standalone.mark, f'"stanza=web_ping://{name}"')
-            )
-            or None
+            searcher.search(errors_query(standalone.mark, stanza_filter(name))) or None
         ),
         EVENT_TIMEOUT,
         standalone.stages,
@@ -334,11 +339,11 @@ def test_setup_error_is_logged_once(standalone: Stack, name: str) -> None:
 
 def test_no_error_lines_for_other_stanzas(standalone: Stack) -> None:
     excluded = " ".join(
-        f'NOT "stanza=web_ping://{name}"'
+        f"NOT {stanza_filter(name)}"
         for name in [*INVALID_STANZAS, *SETUP_ERROR_STANZAS]
     )
     errors = standalone.searcher("so1").search(
-        errors_query(standalone.mark, f'"stanza=web_ping://" {excluded}')
+        errors_query(standalone.mark, f"{stanza_filter()} {excluded}")
     )
     assert errors == [], errors
 
@@ -348,7 +353,7 @@ def test_no_error_lines_for_other_stanzas(standalone: Stack) -> None:
 
 def test_restart_keeps_the_schedule(standalone: Stack) -> None:
     counted = counted_stanzas()
-    sources = {f"web_ping://{name}" for name in counted}
+    sources = {flavor.current().stanza(name) for name in counted}
     searcher = standalone.searcher("so1")
     before = event_counts(searcher, standalone.mark)
     assert {s: before.get(s) for s in sources} == dict.fromkeys(sources, 1), before
@@ -356,7 +361,8 @@ def test_restart_keeps_the_schedule(standalone: Stack) -> None:
     time.sleep(AFTER_RESTART)
     after = event_counts(searcher, standalone.mark)
     assert {s: after.get(s) for s in sources} == dict.fromkeys(sources, 1), after
-    files = set(standalone.exec("so1", f"ls {CHECKPOINT_DIR}\n").split())
+    checkpoints = flavor.current().checkpoint_dir
+    files = set(standalone.exec("so1", f"ls {checkpoints}\n").split())
     for source in sources:
         digest = hashlib.sha224(source.encode("utf-8")).hexdigest()
         assert f"{digest}.json" in files, f"no checkpoint for {source}"
@@ -365,7 +371,7 @@ def test_restart_keeps_the_schedule(standalone: Stack) -> None:
 def test_stanza_added_through_rest_runs(standalone: Stack) -> None:
     since = time.time()
     _ = standalone.rest("so1").post(
-        f"/servicesNS/nobody/{CONFIG_APP}/data/inputs/web_ping",
+        f"/servicesNS/nobody/{CONFIG_APP}/data/inputs/{flavor.current().scheme}",
         {
             "name": "rest-added",
             "title": "rest-added",

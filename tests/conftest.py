@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from wptest import flavor
 from wptest.versions import ALL, EDGES, LINES, chosen_lines, edge_lines
 
 INTEGRATION_PATH = "tests/integration"
@@ -57,14 +58,23 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store_true",
         help="golden capture: write tests/golden/<version>/ instead of comparing",
     )
+    group.addoption(
+        "--flavor",
+        choices=tuple(flavor.FLAVORS),
+        default=flavor.DROP_IN.name,
+        help="the package under test: drop-in (default) or side-by-side, which runs"
+        " the standalone stack only",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Refuse an unknown --splunk-line before collection, as argparse choices would."""
+    """Refuse an unknown --splunk-line before collection, as argparse choices would,
+    and select the build under test."""
     try:
         _ = chosen_lines(str(config.getoption("--splunk-line")))
     except ValueError as exc:
         raise pytest.UsageError(str(exc)) from exc
+    flavor.select(str(config.getoption("--flavor")))
 
 
 @pytest.fixture(scope="session")

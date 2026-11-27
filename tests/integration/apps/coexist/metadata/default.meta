@@ -1,0 +1,4 @@
+# Visible to the website_ping app, as a website_ping.conf kept in another app
+# than website_ping must be.
+[website_ping]
+export = system

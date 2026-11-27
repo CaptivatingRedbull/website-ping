@@ -40,10 +40,12 @@ pytest tests/integration -m "single or network or parity" --splunk-line all --py
 pytest tests/integration -m parity                 # parity stack only
 pytest tests/integration -m no_route               # no-route stack
 pytest tests/integration -m distributed            # distributed stack
-pytest tests/integration -m release                # AppInspect on the tarball
+pytest tests/integration -m release                # AppInspect on both tarballs (drop-in and side-by-side)
+pytest tests/integration -m "single or network" --flavor side-by-side   # smoke and network on the side-by-side build
 pytest tests/integration -m spike --splunk-line 9.4 -k standalone --keep
 pytest tests/integration -m golden --splunk-line 9.4 --golden-write    
 pytest tests/integration -m migration --splunk-line all --python all   # migration from Website Monitoring 2.9.7 (release)
+pytest tests/integration -m coexist --splunk-line 9.4   # side-by-side build next to Website Monitoring 2.9.7 (release)
 pytest tests/integration                           # everything, one stack at a time
 ```
 
@@ -67,6 +69,15 @@ Options:
   (`golden`) choose their own interpreter, so they run only on each line's
   default. Test ids and stack names carry the runtime, for example
   `[10.6-py3.9]` and `wptest-106-py39-standalone-<id>`.
+* `--flavor side-by-side` builds and tests the side-by-side package
+  (`docs/side-by-side.md`) instead of the drop-in one (the default). The config
+  apps under `apps/` are written with the drop-in names; `wptest/flavor.py`
+  converts them (`[website_ping://...]`, `[website_ping]`, `website_ping.conf`),
+  and the tests look for the build's source, realm, log stanza, checkpoint folder
+  and input script. Only the standalone stack (`single`, `network`), the coexist
+  stack and `release` run with it; the other stacks test the migration from
+  Website Monitoring, its golden capture or deployment, which the build does not
+  change. `release` checks both packages whatever this option says.
 
 A standalone stack takes about 7 minutes per runtime, the no-route stack about
 2 minutes and the distributed stack about 10 minutes. `--splunk-line all
@@ -104,6 +115,18 @@ the same files in the place of the guide's backup, the passwords are stored
 again, and the same tests run without the checkpoint, rollback and 2.9.7 ones.
 The `kill -STOP` test runs on 9.4 and on 10.6 with 3.13 only. The migration
 stack takes about 18 minutes on 9.4, 11 of them for the `kill -STOP` test.
+
+The coexist stack (`-m coexist`, run only when `-m` names it, 9.4 only)
+installs Website Monitoring 2.9.7 and the side-by-side build of
+`docs/side-by-side.md` (`scripts/package.py --flavor side-by-side`) on one
+instance. Both apps get the inputs of `wptest/coexist.py` under the same
+stanza names, a conf stanza of the same name with different proxy settings,
+and a password stored for each app's realm. The tests check that each app runs
+only its own inputs, reads its own conf stanza, sends its own password and
+user agent, keeps its checkpoints in its own folder, and that website-ping's
+index-time settings leave 2.9.7's event times alone. They also check that
+searches in other apps see only 2.9.7's macro, eventtype and saved search, and
+that `btool check` and `website_ping.log` report nothing about website-ping.
 
 The parity stack stores every password in `storage/passwords` (in the `search`
 app) before the inputs start; its generated `inputs.conf` and

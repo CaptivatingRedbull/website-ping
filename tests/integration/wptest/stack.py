@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
+from wptest import flavor
 from wptest.certs import SPLUNK_CERT_DIR
 from wptest.splunk_rest import Searcher, SplunkCli, SplunkRest
 from wptest.versions import LINES, Runtime
@@ -26,6 +27,7 @@ COMPOSE_FILES = {
     "golden": COMPOSE_DIR / "standalone.yml",
     "parity": COMPOSE_DIR / "standalone.yml",
     "migration": COMPOSE_DIR / "standalone.yml",
+    "coexist": COMPOSE_DIR / "standalone.yml",
 }
 SPLUNK_SERVICES = {
     "standalone": ("so1",),
@@ -35,6 +37,7 @@ SPLUNK_SERVICES = {
     "golden": ("so1",),
     "parity": ("so1",),
     "migration": ("so1",),
+    "coexist": ("so1",),
 }
 HOST_PORTS = (8000, 8088, 8089, 9997)
 SPLUNK = "/opt/splunk/bin/splunk"
@@ -129,7 +132,7 @@ INPUT_PROCESS_SCRIPT = r"""
 end=$((SECONDS+40))
 while [ $SECONDS -lt $end ]; do
   for d in /proc/[0-9]*; do
-    grep -qa 'web_ping[.]py' "$d/cmdline" 2>/dev/null || continue
+    grep -qa '@SCHEME@[.]py' "$d/cmdline" 2>/dev/null || continue
     exe=$(readlink "$d/exe" 2>/dev/null) || continue
     case "$(basename "$exe")" in python*) ;; *) continue ;; esac
     echo "exe=$exe"
@@ -139,20 +142,28 @@ while [ $SECONDS -lt $end ]; do
   done
   sleep 0.2
 done
-echo "no web_ping.py process seen in 40 s" >&2
+echo "no @SCHEME@.py process seen in 40 s" >&2
 exit 1
 """
 
 INPUT_PIDS_SCRIPT = r"""
 for d in /proc/[0-9]*; do
-  grep -qa 'web_ping[.]py' "$d/cmdline" 2>/dev/null || continue
+  grep -qa '@SCHEME@[.]py' "$d/cmdline" 2>/dev/null || continue
   exe=$(readlink "$d/exe" 2>/dev/null) || continue
   case "$(basename "$exe")" in python*) echo "${d#/proc/}" ;; esac
 done
 """
 
 APP_LOG = "/opt/splunk/var/log/splunk/website_ping.log"
-CHECKPOINT_DIR = "/opt/splunk/var/lib/splunk/modinputs/web_ping"
+
+
+def _for_scheme(script: str) -> str:
+    """A process script for the input script of the build under test."""
+    return script.replace("@SCHEME@", flavor.current().scheme)
+
+
+CHECKPOINT_DIR = flavor.DROP_IN.checkpoint_dir
+"""The drop-in build's; flavor.current().checkpoint_dir is the one under test."""
 APP_LOG_TIME = "%Y-%m-%d %H:%M:%S,%f %z"
 
 
@@ -335,17 +346,17 @@ class Stack:
         ).strip()
 
     def input_process(self, service: str) -> dict[str, str]:
-        """exe and proxy and certificate variables of the running web_ping.py.
+        """exe and proxy and certificate variables of the running input script.
 
         The input is one long-running process; the 40 seconds cover a splunkd that
         is still starting it.
         """
-        output = self.exec(service, INPUT_PROCESS_SCRIPT, timeout=60)
+        output = self.exec(service, _for_scheme(INPUT_PROCESS_SCRIPT), timeout=60)
         return dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
 
     def input_pids(self, service: str) -> list[int]:
-        """Process ids of the web_ping.py interpreters running now."""
-        output = self.exec(service, INPUT_PIDS_SCRIPT)
+        """Process ids of the input script's interpreters running now."""
+        output = self.exec(service, _for_scheme(INPUT_PIDS_SCRIPT))
         return sorted(int(word) for word in output.split() if word.isdigit())
 
     def app_log(self, service: str) -> list[tuple[float, str]]:

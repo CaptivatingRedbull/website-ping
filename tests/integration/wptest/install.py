@@ -13,7 +13,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from wptest.stack import CHECKPOINT_DIR, SPLUNK, Stack
+from wptest import flavor
+from wptest.stack import SPLUNK, Stack
 from wptest.versions import Runtime
 from wptest.wait import Stages, wait_for
 
@@ -22,13 +23,14 @@ APP = "website_ping"
 CONFIG_APP = "website_ping_inputs"
 STORED_PASSWORD_STANZA = "stored-password"
 STORED_PASSWORD = "wptest-stored-password"
-"""Stored for web_ping://stored-password in the search app; must never be logged."""
+"""Stored for <scheme>://stored-password in the search app; must never be logged."""
 PROBE_APP = "wptest_probe"
 PROBE_IN_CONTAINER = f"/tmp/{PROBE_APP}.tar.gz"
 APPS_DIR = ROOT / "tests" / "integration" / "apps"
 TARBALL_IN_CONTAINER = "/tmp/website_ping.tar.gz"
 CONFIG_IN_CONTAINER = "/tmp/website_ping_inputs.tar.gz"
-EXECUTABLE = "bin/web_ping.py"
+EXECUTABLES = ("bin/web_ping.py", "bin/website_ping.py")
+"""The input script of the drop-in and of the side-by-side build."""
 EXTRA_ALLOWED = ("bin/__pycache__/", "local/")
 RESTART_TIMEOUT = 300
 # splunk install app records the archive's checksum in default/app.conf and
@@ -92,10 +94,10 @@ def app_conf_differences(packaged: str, installed: str) -> list[str]:
     ]
 
 
-def build_package() -> Package:
+def build_package(flavor: str = "drop-in") -> Package:
     """Run scripts/package.py and record the tarball's hash and the working tree state."""
     output = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "package.py")],
+        [sys.executable, str(ROOT / "scripts" / "package.py"), "--flavor", flavor],
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -145,7 +147,8 @@ def python_override(runtime: Runtime) -> dict[str, str]:
     """
     if not runtime.overridden:
         return {}
-    return {"local/inputs.conf": f"[web_ping]\npython.required = {runtime.python}\n"}
+    scheme = flavor.current().scheme
+    return {"local/inputs.conf": f"[{scheme}]\npython.required = {runtime.python}\n"}
 
 
 def _tar_entry(name: str, mode: int, data: bytes | None = None) -> tarfile.TarInfo:
@@ -169,25 +172,34 @@ def build_config_app(
     """Archive a config app: top folder website_ping_inputs, uid 0, 644 files, 755 folders.
 
     extra adds text files by path relative to the app folder; they must not exist
-    in source.
+    in source. Text files written with the drop-in names are converted for the
+    build under test (flavor.Flavor.translate).
     """
+    under_test = flavor.current()
     folders: set[str] = set()
     with tarfile.open(output, "w:gz") as tar:
         paths = sorted(source.rglob("*"))
         for path in [source, *paths]:
             relative = path.relative_to(source).as_posix()
-            name = top if relative == "." else f"{top}/{relative}"
             if path.is_dir():
+                name = top if relative == "." else f"{top}/{relative}"
                 folders.add(relative)
                 tar.addfile(_tar_entry(name, 0o755))
             else:
                 data = path.read_bytes()
+                if path.suffix in (".conf", ".meta"):
+                    relative, text = under_test.translate(
+                        relative, data.decode("utf-8")
+                    )
+                    data = text.encode("utf-8")
+                name = f"{top}/{relative}"
                 script = relative.startswith("bin/") and path.suffix == ".py"
                 info = _tar_entry(name, 0o755 if script else 0o644, data)
                 tar.addfile(info, io.BytesIO(data))
-        for relative, text in sorted((extra or {}).items()):
-            if (source / relative).exists():
-                raise ValueError(f"{relative} is already in {source}")
+        for original, original_text in sorted((extra or {}).items()):
+            if (source / original).exists():
+                raise ValueError(f"{original} is already in {source}")
+            relative, text = under_test.translate(original, original_text)
             parents = PurePosixPath(relative).parents
             for folder in sorted(str(p) for p in parents if str(p) != "."):
                 if folder not in folders:
@@ -231,7 +243,7 @@ def stop_mark_start(stack: Stack, service: str, mark_from_target: bool) -> float
     a stanza checked once an hour would have no event after the mark.
     """
     stack.splunk(service, "stop", timeout=RESTART_TIMEOUT)
-    stack.exec(service, f"rm -rf {CHECKPOINT_DIR}\n")
+    stack.exec(service, f"rm -rf {flavor.current().checkpoint_dir}\n")
     mark = time.time()
     if mark_from_target:
         stack.exec(service, "curl --noproxy '*' -fsS http://target:8080/__reset\n")
@@ -315,7 +327,7 @@ def verify_install(
             problems.append(f"{service}: {relative} has a different SHA-256")
         if entry.owner != "splunk":
             problems.append(f"{service}: {relative} owned by {entry.owner}")
-        if relative == EXECUTABLE and entry.mode != "755":
+        if relative in EXECUTABLES and entry.mode != "755":
             problems.append(
                 f"{service}: {relative} has mode {entry.mode}, expected 755"
             )
@@ -342,7 +354,7 @@ def verify_install(
 
 
 def script_mode(stack: Stack, service: str, path: str) -> str:
-    return stack.exec(service, f"stat -c %a {path}/{EXECUTABLE}\n").strip()
+    return stack.exec(service, f"stat -c %a {path}/{EXECUTABLES[0]}\n").strip()
 
 
 def install_single(
@@ -365,15 +377,20 @@ def install_single(
     return mark
 
 
-def stanza_registered(stack: Stack, service: str, stanza: str) -> bool:
-    output = stack.exec(service, f"{SPLUNK} btool inputs list web_ping://{stanza}\n")
-    return f"[web_ping://{stanza}]" in output
+def stanza_registered(
+    stack: Stack, service: str, stanza: str, scheme: str | None = None
+) -> bool:
+    scheme = scheme or flavor.current().scheme
+    output = stack.exec(service, f"{SPLUNK} btool inputs list {scheme}://{stanza}\n")
+    return f"[{scheme}://{stanza}]" in output
 
 
-def wait_registered(stack: Stack, service: str, stanza: str, stages: Stages) -> None:
+def wait_registered(
+    stack: Stack, service: str, stanza: str, stages: Stages, scheme: str | None = None
+) -> None:
     wait_for(
         "input registered",
-        lambda: True if stanza_registered(stack, service, stanza) else None,
+        lambda: True if stanza_registered(stack, service, stanza, scheme) else None,
         RESTART_TIMEOUT,
         stages,
     )

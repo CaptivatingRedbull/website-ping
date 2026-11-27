@@ -11,6 +11,8 @@ import urllib.request
 from collections.abc import Callable
 from typing import Protocol, cast
 
+from wptest import flavor
+
 
 def _flatten(result: dict[str, object]) -> dict[str, str]:
     """Search results as strings. A multivalue field keeps its first value."""
@@ -63,7 +65,8 @@ def body_count_query(title: str, since: float) -> str:
     """The number of a stanza's body events indexed since the mark."""
     return (
         'search index=main sourcetype="web_ping:response"'
-        f' source="web_ping://{title}" _index_earliest={int(since)} | stats count'
+        f' source="{flavor.current().stanza(title)}" _index_earliest={int(since)}'
+        " | stats count"
     )
 
 

@@ -12,8 +12,9 @@ from typing import IO
 from urllib.parse import urlparse
 
 import pytest
-from wptest import evidence as evidence_module
 from wptest import (
+    coexist,
+    flavor,
     host_snapshot,
     install,
     legacy,
@@ -22,6 +23,7 @@ from wptest import (
     parity,
     preflight,
 )
+from wptest import evidence as evidence_module
 from wptest.certs import SPLUNK_CERT_DIR, Certificates, generate
 from wptest.evidence import Evidence
 from wptest.install import APPS_DIR, Package
@@ -41,7 +43,7 @@ from wptest.versions import (
     select_runtimes,
     version_key,
 )
-from wptest.wait import HEALTHY, INSTALL, PROBE, STARTED, Stages, wait_for
+from wptest.wait import HEALTHY, INDEXED, INSTALL, PROBE, STARTED, Stages, wait_for
 
 TERMS_VAR = "WPTEST_ACCEPT_SPLUNK_TERMS"
 EXTRA_COMPOSE_VAR = "WPTEST_EXTRA_COMPOSE"
@@ -57,6 +59,7 @@ TOPOLOGY_OF_MARKER = {
     "golden": "golden",
     "parity": "parity",
     "migration": "migration",
+    "coexist": "coexist",
 }
 TOPOLOGY_ORDER = (
     "standalone",
@@ -65,9 +68,10 @@ TOPOLOGY_ORDER = (
     "spike",
     "golden",
     "migration",
+    "coexist",
     "distributed",
 )
-OPT_IN_MARKERS = ("spike", "golden", "migration")
+OPT_IN_MARKERS = ("spike", "golden", "migration", "coexist")
 OWN_INTERPRETER_MARKERS = ("spike", "golden")
 """Tests of apps that are not website-ping and choose their interpreter themselves."""
 MANAGER_KEY = pytest.StashKey["StackManager"]()
@@ -106,6 +110,23 @@ def _deselect_opt_in(config: pytest.Config, items: list[pytest.Item]) -> None:
         items[:] = [i for i in items if i not in deselected]
 
 
+def _deselect_other_topologies(items: list[pytest.Item], config: pytest.Config) -> None:
+    """The side-by-side build runs on the stacks flavor.TOPOLOGIES names, plus the
+    coexist stack and the tests that need no stack (release)."""
+    allowed = flavor.TOPOLOGIES[flavor.current().name]
+    if allowed is None:
+        return
+    deselected = [
+        item
+        for item in items
+        if (topology := _topology(item)) is not None
+        and topology not in allowed | {"coexist"}
+    ]
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = [i for i in items if i not in deselected]
+
+
 def _deselect_interpreter_overrides(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
@@ -134,6 +155,7 @@ def pytest_collection_modifyitems(
     """Drop opt-in tests and interpreter variants of other apps' tests, then group
     by runtime and topology so each stack starts once"""
     _deselect_opt_in(config, items)
+    _deselect_other_topologies(items, config)
     _deselect_interpreter_overrides(config, items)
     runtimes = list(ALL_RUNTIMES)
 
@@ -168,8 +190,8 @@ def stanza_hosts() -> list[str]:
         *parity.PARITY_SCENARIOS,
         *(item.scenario for item in migration.LEGACY_INPUTS),
     ]
-    for scenario in scenarios:
-        host = urlparse(scenario.url).hostname
+    for url in [*(scenario.url for scenario in scenarios), *coexist.urls()]:
+        host = urlparse(url).hostname
         if host:
             hosts.append(host)
     return hosts
@@ -286,7 +308,10 @@ class StackManager:
                 ("splunkd.log", "cat /opt/splunk/var/log/splunk/splunkd.log\n"),
                 (
                     "modinput.log",
-                    "grep -h web_ping /opt/splunk/var/log/splunk/splunkd.log || true\n",
+                    (
+                        f"grep -h {flavor.current().scheme}"
+                        " /opt/splunk/var/log/splunk/splunkd.log || true\n"
+                    ),
                 ),
                 (
                     "website_ping.log",
@@ -423,7 +448,7 @@ def setup_standalone(stack: Stack, manager: StackManager) -> None:
         {
             "name": "wptest-user",
             "password": install.STORED_PASSWORD,
-            "realm": f"web_ping://{install.STORED_PASSWORD_STANZA}",
+            "realm": flavor.current().stanza(install.STORED_PASSWORD_STANZA),
         },
     )
     install.install_single(
@@ -473,7 +498,7 @@ def setup_noroute(stack: Stack, manager: StackManager) -> None:
             if _logged_since(
                 stack,
                 "so1",
-                "web_ping://no-direct-route",
+                flavor.current().stanza("no-direct-route"),
                 "starting check",
                 stack.mark,
             )
@@ -635,6 +660,61 @@ def setup_migration(stack: Stack, manager: StackManager) -> None:
     )
 
 
+def setup_coexist(stack: Stack, manager: StackManager) -> None:
+    """Standalone compose file with Website Monitoring 2.9.7 and the side-by-side
+    build of website-ping, each with inputs of the same stanza names."""
+    source = legacy.download()
+    legacy_package = legacy.build_legacy_package(
+        source, manager.workdir / f"{legacy.LEGACY_APP}-{legacy.LEGACY_VERSION}.tar.gz"
+    )
+    package = install.build_package("side-by-side")
+    manager.evidence.note(f"{stack.project}.tarball_sha256", package.sha256)
+    stack.facts["package"] = package
+    config = coexist.Config(coexist.far_time_of_day())
+    stack.facts["coexist"] = config
+    _start(stack, manager)
+    _deliver_helpers(stack, manager, ("so1",))
+    _probe(stack, manager, ("so1",))
+    rest = stack.rest("so1")
+    # Both passwords in the search app, as an admin would store them.
+    for scheme, password in coexist.PASSWORDS.items():
+        _ = rest.post(
+            "/servicesNS/nobody/search/storage/passwords",
+            {
+                "name": coexist.USERNAME,
+                "password": password,
+                "realm": coexist.realm(scheme),
+            },
+        )
+    legacy.install_legacy(stack, "so1", legacy_package)
+    workdir = manager.workdir / stack.project
+    workdir.mkdir(parents=True, exist_ok=True)
+    inputs = workdir / "legacy-inputs.conf"
+    inputs.write_text(coexist.inputs_conf(coexist.LEGACY_SCHEME, config), "utf-8")
+    conf = workdir / "legacy-website_monitoring.conf"
+    conf.write_text(coexist.legacy_conf(), encoding="utf-8")
+    legacy.write_local(
+        stack, "so1", {"inputs.conf": inputs, "website_monitoring.conf": conf}
+    )
+    archive = install.build_config_app(
+        APPS_DIR / "coexist",
+        workdir / "website_ping_inputs-coexist.tar.gz",
+        extra={
+            "default/inputs.conf": coexist.inputs_conf(coexist.SCHEME, config),
+            "default/website_ping.conf": coexist.side_by_side_conf(),
+        },
+    )
+    install.install_single(stack, "so1", package, archive, True)
+    for scheme in (coexist.LEGACY_SCHEME, coexist.SCHEME):
+        install.wait_registered(stack, "so1", coexist.SAME, stack.stages, scheme)
+    wait_for(
+        INDEXED,
+        lambda: coexist.all_events(stack.searcher("so1"), stack.mark),
+        EVENT_TIMEOUT,
+        stack.stages,
+    )
+
+
 SETUPS: dict[str, Callable[[Stack, StackManager], None]] = {
     "standalone": setup_standalone,
     "noroute": setup_noroute,
@@ -643,6 +723,7 @@ SETUPS: dict[str, Callable[[Stack, StackManager], None]] = {
     "golden": setup_golden,
     "parity": setup_parity,
     "migration": setup_migration,
+    "coexist": setup_coexist,
 }
 
 
@@ -712,11 +793,12 @@ def harness(
 def package(harness: Harness) -> Package:
     stages = Stages()
     try:
-        built = install.build_package()
+        built = install.build_package(flavor.current().name)
     except Exception as exc:
         raise stages.fail("build", str(exc)) from exc
     harness.evidence.note("tarball_sha256", built.sha256)
     harness.evidence.note("tarball", str(built.path))
+    harness.evidence.note("flavor", flavor.current().name)
     harness.evidence.note("working_tree_dirty", built.dirty)
     return built
 
@@ -783,6 +865,13 @@ def parity_stack(stacks: StackManager, runtime: Runtime) -> Stack:
 @pytest.fixture
 def migration_stack(stacks: StackManager, runtime: Runtime) -> Stack:
     return stacks.get(runtime, "migration")
+
+
+@pytest.fixture
+def coexist_stack(stacks: StackManager, runtime: Runtime) -> Stack:
+    if runtime.line != legacy.LEGACY_LINE:
+        pytest.skip(f"Website Monitoring 2.9.7 installs on {legacy.LEGACY_LINE} only")
+    return stacks.get(runtime, "coexist")
 
 
 @pytest.fixture
